@@ -1,0 +1,761 @@
+[
+  {
+    "id": "evergreen_event_001",
+    "source": "evergreen",
+    "title": "Have a Picnic at Zilker",
+    "category": "Outdoors",
+    "venueId": "evergreen_001",
+    "venueName": "Zilker Park",
+    "vibeTags": [
+      "outdoor",
+      "sunny-day",
+      "groups",
+      "low-key",
+      "weekend-energy",
+      "touch-grass",
+      "picnic",
+      "golden-hour"
+    ]
+  },
+  {
+    "id": "evergreen_event_002",
+    "source": "evergreen",
+    "title": "Enjoy the Sunset Walk Through Zilker",
+    "category": "Wellness",
+    "venueId": "evergreen_001",
+    "venueName": "Zilker Park",
+    "vibeTags": [
+      "sunset",
+      "wellness",
+      "solo-friendly",
+      "date-night",
+      "outdoor",
+      "low-key",
+      "touch-grass"
+    ]
+  },
+  {
+    "id": "evergreen_event_003",
+    "source": "evergreen",
+    "title": "Throw a Frisbee with Friends at Zilker",
+    "category": "Social",
+    "venueId": "evergreen_001",
+    "venueName": "Zilker Park",
+    "vibeTags": [
+      "sunny-day",
+      "social-energy",
+      "groups",
+      "outdoor",
+      "casual-fun",
+      "weekend-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_004",
+    "source": "evergreen",
+    "title": "Read a Book Under a Tree at Zilker",
+    "category": "Low-Key",
+    "venueId": "evergreen_001",
+    "venueName": "Zilker Park",
+    "vibeTags": [
+      "solo-friendly",
+      "quiet-energy",
+      "afternoon",
+      "sunny-day",
+      "outdoor",
+      "journal-spot"
+    ]
+  },
+  {
+    "id": "evergreen_event_005",
+    "source": "evergreen",
+    "title": "Take a Swim at Barton Springs",
+    "category": "Wellness",
+    "venueId": "evergreen_002",
+    "venueName": "Barton Springs Pool",
+    "vibeTags": [
+      "sunny-day",
+      "wellness",
+      "outdoor",
+      "touch-grass",
+      "social-energy",
+      "classic-austin"
+    ]
+  },
+  {
+    "id": "evergreen_event_006",
+    "source": "evergreen",
+    "title": "Reset with a Cold Plunge at Barton Springs",
+    "category": "Wellness",
+    "venueId": "evergreen_002",
+    "venueName": "Barton Springs Pool",
+    "vibeTags": [
+      "wellness",
+      "morning",
+      "solo-friendly",
+      "outdoor",
+      "reset-energy",
+      "touch-grass"
+    ]
+  },
+  {
+    "id": "evergreen_event_007",
+    "source": "evergreen",
+    "title": "Paddle Board on Lady Bird Lake",
+    "category": "Outdoors",
+    "venueId": "evergreen_003",
+    "venueName": "Lady Bird Lake Trail",
+    "vibeTags": [
+      "outdoor",
+      "sunny-day",
+      "date-night",
+      "social-energy",
+      "wellness",
+      "golden-hour"
+    ]
+  },
+  {
+    "id": "evergreen_event_008",
+    "source": "evergreen",
+    "title": "Go for a Sunset Jog on the Trail",
+    "category": "Fitness",
+    "venueId": "evergreen_003",
+    "venueName": "Lady Bird Lake Trail",
+    "vibeTags": [
+      "sunset",
+      "fitness",
+      "wellness",
+      "solo-friendly",
+      "outdoor",
+      "after-work"
+    ]
+  },
+  {
+    "id": "evergreen_event_009",
+    "source": "evergreen",
+    "title": "Start Your Morning with a Walk and Coffee",
+    "category": "Wellness",
+    "venueId": "evergreen_003",
+    "venueName": "Lady Bird Lake Trail",
+    "vibeTags": [
+      "morning",
+      "coffee-shop",
+      "low-key",
+      "wellness",
+      "touch-grass",
+      "solo-friendly"
+    ]
+  },
+  {
+    "id": "evergreen_event_010",
+    "source": "evergreen",
+    "title": "Journal at Radio Coffee",
+    "category": "Low-Key",
+    "venueId": "evergreen_004",
+    "venueName": "Radio Coffee & Beer",
+    "vibeTags": [
+      "coffee-shop",
+      "journal-spot",
+      "solo-friendly",
+      "patio-weather",
+      "low-key",
+      "creative"
+    ]
+  },
+  {
+    "id": "evergreen_event_011",
+    "source": "evergreen",
+    "title": "Meet for a Casual Coffee Date at Radio",
+    "category": "Date Night",
+    "venueId": "evergreen_004",
+    "venueName": "Radio Coffee & Beer",
+    "vibeTags": [
+      "date-night",
+      "coffee-shop",
+      "patio-weather",
+      "afternoon",
+      "casual-date"
+    ]
+  },
+  {
+    "id": "evergreen_event_012",
+    "source": "evergreen",
+    "title": "Work Remotely from the Patio at Radio",
+    "category": "Low-Key",
+    "venueId": "evergreen_004",
+    "venueName": "Radio Coffee & Beer",
+    "vibeTags": [
+      "work-remote",
+      "coffee-shop",
+      "patio-weather",
+      "afternoon",
+      "creative",
+      "solo-friendly"
+    ]
+  },
+  {
+    "id": "evergreen_event_013",
+    "source": "evergreen",
+    "title": "Grab Tacos and Coffee with Friends",
+    "category": "Social",
+    "venueId": "evergreen_004",
+    "venueName": "Radio Coffee & Beer",
+    "vibeTags": [
+      "social-energy",
+      "groups",
+      "cheap-thrills",
+      "patio-weather",
+      "casual-fun"
+    ]
+  },
+  {
+    "id": "evergreen_event_014",
+    "source": "evergreen",
+    "title": "Enjoy Golden Hour Drinks at Cosmic",
+    "category": "Social",
+    "venueId": "evergreen_006",
+    "venueName": "Cosmic Coffee",
+    "vibeTags": [
+      "golden-hour",
+      "patio-weather",
+      "date-night",
+      "social-energy",
+      "main-character"
+    ]
+  },
+  {
+    "id": "evergreen_event_015",
+    "source": "evergreen",
+    "title": "Stargaze at Cosmic Coffee",
+    "category": "Weird Austin",
+    "venueId": "evergreen_006",
+    "venueName": "Cosmic Coffee",
+    "vibeTags": [
+      "weird-austin",
+      "night-time",
+      "low-key",
+      "outdoor",
+      "date-night"
+    ]
+  },
+  {
+    "id": "evergreen_event_016",
+    "source": "evergreen",
+    "title": "Spend a Chill Patio Night at Cosmic",
+    "category": "Low-Key",
+    "venueId": "evergreen_006",
+    "venueName": "Cosmic Coffee",
+    "vibeTags": [
+      "low-key",
+      "night-time",
+      "patio-weather",
+      "social-energy",
+      "creative"
+    ]
+  },
+  {
+    "id": "evergreen_event_017",
+    "source": "evergreen",
+    "title": "Meet Friends for Patio Drinks on the East Side",
+    "category": "Social",
+    "venueId": "evergreen_005",
+    "venueName": "Cosmic Saltillo",
+    "vibeTags": [
+      "east-side-energy",
+      "social-energy",
+      "patio-weather",
+      "groups",
+      "after-work"
+    ]
+  },
+  {
+    "id": "evergreen_event_018",
+    "source": "evergreen",
+    "title": "Grab Coffee and Take a Solo Walk",
+    "category": "Wellness",
+    "venueId": "evergreen_005",
+    "venueName": "Cosmic Saltillo",
+    "vibeTags": [
+      "solo-friendly",
+      "wellness",
+      "coffee-shop",
+      "afternoon",
+      "east-side-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_019",
+    "source": "evergreen",
+    "title": "Watch the Sunset Over Lake Austin",
+    "category": "Date Night",
+    "venueId": "evergreen_007",
+    "venueName": "Mozart’s Coffee Roasters",
+    "vibeTags": [
+      "sunset",
+      "date-night",
+      "coffee-shop",
+      "patio-weather",
+      "quiet-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_020",
+    "source": "evergreen",
+    "title": "Study with a View at Mozart’s",
+    "category": "Low-Key",
+    "venueId": "evergreen_007",
+    "venueName": "Mozart’s Coffee Roasters",
+    "vibeTags": [
+      "solo-friendly",
+      "creative",
+      "coffee-shop",
+      "quiet-energy",
+      "afternoon"
+    ]
+  },
+  {
+    "id": "evergreen_event_021",
+    "source": "evergreen",
+    "title": "Walk South Congress and Browse Vintage Shops",
+    "category": "Social",
+    "venueId": "evergreen_008",
+    "venueName": "South Congress Avenue",
+    "vibeTags": [
+      "social-energy",
+      "shopping",
+      "walkable",
+      "main-character",
+      "classic-austin"
+    ]
+  },
+  {
+    "id": "evergreen_event_022",
+    "source": "evergreen",
+    "title": "Window Shop Along South Congress",
+    "category": "Low-Key",
+    "venueId": "evergreen_008",
+    "venueName": "South Congress Avenue",
+    "vibeTags": [
+      "low-key",
+      "walkable",
+      "people-watching",
+      "afternoon",
+      "casual-fun"
+    ]
+  },
+  {
+    "id": "evergreen_event_023",
+    "source": "evergreen",
+    "title": "Go on a Casual Date Night on SoCo",
+    "category": "Date Night",
+    "venueId": "evergreen_008",
+    "venueName": "South Congress Avenue",
+    "vibeTags": [
+      "date-night",
+      "night-time",
+      "walkable",
+      "main-character",
+      "social-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_024",
+    "source": "evergreen",
+    "title": "People Watch on South Congress",
+    "category": "Social",
+    "venueId": "evergreen_008",
+    "venueName": "South Congress Avenue",
+    "vibeTags": [
+      "people-watching",
+      "social-energy",
+      "afternoon",
+      "main-character"
+    ]
+  },
+  {
+    "id": "evergreen_event_025",
+    "source": "evergreen",
+    "title": "Take an Evening Walk at Waterloo Greenway",
+    "category": "Wellness",
+    "venueId": "evergreen_009",
+    "venueName": "Waterloo Greenway",
+    "vibeTags": [
+      "sunset",
+      "wellness",
+      "outdoor",
+      "low-key",
+      "touch-grass"
+    ]
+  },
+  {
+    "id": "evergreen_event_026",
+    "source": "evergreen",
+    "title": "Have a Picnic at Waterloo Greenway",
+    "category": "Outdoors",
+    "venueId": "evergreen_009",
+    "venueName": "Waterloo Greenway",
+    "vibeTags": [
+      "picnic",
+      "outdoor",
+      "sunny-day",
+      "groups",
+      "weekend-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_027",
+    "source": "evergreen",
+    "title": "Spot Peacocks at Mayfield Park",
+    "category": "Weird Austin",
+    "venueId": "evergreen_010",
+    "venueName": "Mayfield Park",
+    "vibeTags": [
+      "weird-austin",
+      "outdoor",
+      "quiet-energy",
+      "solo-friendly",
+      "sunny-day"
+    ]
+  },
+  {
+    "id": "evergreen_event_028",
+    "source": "evergreen",
+    "title": "Journal in the Gardens at Mayfield",
+    "category": "Low-Key",
+    "venueId": "evergreen_010",
+    "venueName": "Mayfield Park",
+    "vibeTags": [
+      "journal-spot",
+      "creative",
+      "quiet-energy",
+      "outdoor",
+      "solo-friendly"
+    ]
+  },
+  {
+    "id": "evergreen_event_029",
+    "source": "evergreen",
+    "title": "Read on the Central Library Rooftop",
+    "category": "Low-Key",
+    "venueId": "evergreen_011",
+    "venueName": "Central Library Rooftop",
+    "vibeTags": [
+      "reading",
+      "solo-friendly",
+      "quiet-energy",
+      "afternoon",
+      "creative"
+    ]
+  },
+  {
+    "id": "evergreen_event_030",
+    "source": "evergreen",
+    "title": "Take Sunset Photos Downtown",
+    "category": "Social",
+    "venueId": "evergreen_011",
+    "venueName": "Central Library Rooftop",
+    "vibeTags": [
+      "sunset",
+      "creative",
+      "main-character",
+      "walkable",
+      "date-night"
+    ]
+  },
+  {
+    "id": "evergreen_event_031",
+    "source": "evergreen",
+    "title": "Have a Skyline Picnic at the Long Center",
+    "category": "Date Night",
+    "venueId": "evergreen_012",
+    "venueName": "The Long Center Lawn",
+    "vibeTags": [
+      "skyline",
+      "date-night",
+      "picnic",
+      "golden-hour",
+      "outdoor"
+    ]
+  },
+  {
+    "id": "evergreen_event_032",
+    "source": "evergreen",
+    "title": "Hang Outdoors at the Long Center Lawn",
+    "category": "Social",
+    "venueId": "evergreen_012",
+    "venueName": "The Long Center Lawn",
+    "vibeTags": [
+      "free",
+      "social-energy",
+      "groups",
+      "outdoor",
+      "weekend-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_033",
+    "source": "evergreen",
+    "title": "Walk Your Dog at Auditorium Shores",
+    "category": "Wellness",
+    "venueId": "evergreen_013",
+    "venueName": "Auditorium Shores",
+    "vibeTags": [
+      "dogs",
+      "wellness",
+      "outdoor",
+      "sunny-day",
+      "social-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_034",
+    "source": "evergreen",
+    "title": "Do Sunset Yoga by the Water",
+    "category": "Wellness",
+    "venueId": "evergreen_013",
+    "venueName": "Auditorium Shores",
+    "vibeTags": [
+      "sunset",
+      "wellness",
+      "outdoor",
+      "low-key",
+      "touch-grass"
+    ]
+  },
+  {
+    "id": "evergreen_event_035",
+    "source": "evergreen",
+    "title": "Hang Out at Meanwhile Brewing",
+    "category": "Social",
+    "venueId": "evergreen_014",
+    "venueName": "Meanwhile Brewing",
+    "vibeTags": [
+      "social-energy",
+      "groups",
+      "patio-weather",
+      "night-time",
+      "casual-fun"
+    ]
+  },
+  {
+    "id": "evergreen_event_036",
+    "source": "evergreen",
+    "title": "Grab Food Trucks and Drinks at Meanwhile",
+    "category": "Food & Drink",
+    "venueId": "evergreen_014",
+    "venueName": "Meanwhile Brewing",
+    "vibeTags": [
+      "food-trucks",
+      "groups",
+      "social-energy",
+      "night-time",
+      "cheap-thrills"
+    ]
+  },
+  {
+    "id": "evergreen_event_037",
+    "source": "evergreen",
+    "title": "Relax in a Hammock at Pease Park",
+    "category": "Low-Key",
+    "venueId": "evergreen_015",
+    "venueName": "Pease Park",
+    "vibeTags": [
+      "low-key",
+      "outdoor",
+      "solo-friendly",
+      "touch-grass",
+      "quiet-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_038",
+    "source": "evergreen",
+    "title": "Touch Grass at Pease Park",
+    "category": "Wellness",
+    "venueId": "evergreen_015",
+    "venueName": "Pease Park",
+    "vibeTags": [
+      "touch-grass",
+      "wellness",
+      "sunny-day",
+      "outdoor",
+      "solo-friendly"
+    ]
+  },
+  {
+    "id": "evergreen_event_039",
+    "source": "evergreen",
+    "title": "Spend Saturday Morning at Mueller Farmers Market",
+    "category": "Wellness",
+    "venueId": "evergreen_016",
+    "venueName": "Mueller Lake Park",
+    "vibeTags": [
+      "morning",
+      "wellness",
+      "outdoor",
+      "food-drink",
+      "weekend-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_040",
+    "source": "evergreen",
+    "title": "Take a Casual Walk Around Mueller",
+    "category": "Low-Key",
+    "venueId": "evergreen_016",
+    "venueName": "Mueller Lake Park",
+    "vibeTags": [
+      "walkable",
+      "low-key",
+      "afternoon",
+      "solo-friendly"
+    ]
+  },
+  {
+    "id": "evergreen_event_041",
+    "source": "evergreen",
+    "title": "Browse Books at BookPeople",
+    "category": "Low-Key",
+    "venueId": "evergreen_017",
+    "venueName": "BookPeople",
+    "vibeTags": [
+      "reading",
+      "creative",
+      "solo-friendly",
+      "quiet-energy",
+      "rainy-day"
+    ]
+  },
+  {
+    "id": "evergreen_event_042",
+    "source": "evergreen",
+    "title": "Go on a Coffee and Bookstore Date",
+    "category": "Date Night",
+    "venueId": "evergreen_017",
+    "venueName": "BookPeople",
+    "vibeTags": [
+      "date-night",
+      "rainy-day",
+      "coffee-shop",
+      "creative",
+      "low-key"
+    ]
+  },
+  {
+    "id": "evergreen_event_043",
+    "source": "evergreen",
+    "title": "Hike the Barton Creek Greenbelt",
+    "category": "Outdoors",
+    "venueId": "evergreen_018",
+    "venueName": "Barton Creek Greenbelt",
+    "vibeTags": [
+      "hiking",
+      "outdoor",
+      "sunny-day",
+      "wellness",
+      "weekend-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_044",
+    "source": "evergreen",
+    "title": "Swim in the Barton Creek Greenbelt",
+    "category": "Outdoors",
+    "venueId": "evergreen_018",
+    "venueName": "Barton Creek Greenbelt",
+    "vibeTags": [
+      "outdoor",
+      "sunny-day",
+      "adventure",
+      "touch-grass",
+      "social-energy"
+    ]
+  },
+  {
+    "id": "evergreen_event_045",
+    "source": "evergreen",
+    "title": "Spend a Nature Reset Day on the Greenbelt",
+    "category": "Wellness",
+    "venueId": "evergreen_018",
+    "venueName": "Barton Creek Greenbelt",
+    "vibeTags": [
+      "reset-energy",
+      "outdoor",
+      "wellness",
+      "solo-friendly",
+      "touch-grass"
+    ]
+  },
+  {
+    "id": "evergreen_event_046",
+    "source": "evergreen",
+    "title": "Enjoy Fancy Cocktails at Commodore Perry",
+    "category": "Date Night",
+    "venueId": "evergreen_019",
+    "venueName": "Commodore Perry Estate Grounds",
+    "vibeTags": [
+      "date-night",
+      "night-time",
+      "worth-the-splurge",
+      "main-character"
+    ]
+  },
+  {
+    "id": "evergreen_event_047",
+    "source": "evergreen",
+    "title": "Walk the Gardens at Commodore Perry",
+    "category": "Low-Key",
+    "venueId": "evergreen_019",
+    "venueName": "Commodore Perry Estate Grounds",
+    "vibeTags": [
+      "low-key",
+      "outdoor",
+      "quiet-energy",
+      "date-night"
+    ]
+  },
+  {
+    "id": "evergreen_event_048",
+    "source": "evergreen",
+    "title": "Grab Backyard Drinks at Little Darlin",
+    "category": "Social",
+    "venueId": "evergreen_020",
+    "venueName": "The Little Darlin’",
+    "vibeTags": [
+      "social-energy",
+      "patio-weather",
+      "night-time",
+      "groups",
+      "south-austin-vibes"
+    ]
+  },
+  {
+    "id": "evergreen_event_049",
+    "source": "evergreen",
+    "title": "Spend a Casual Night in South Austin",
+    "category": "Low-Key",
+    "venueId": "evergreen_020",
+    "venueName": "The Little Darlin’",
+    "vibeTags": [
+      "low-key",
+      "night-time",
+      "casual-fun",
+      "patio-weather"
+    ]
+  },
+  {
+    "id": "evergreen_event_050",
+    "source": "evergreen",
+    "title": "Meet Friends for a Patio Night at Little Darlin",
+    "category": "Social",
+    "venueId": "evergreen_020",
+    "venueName": "The Little Darlin’",
+    "vibeTags": [
+      "groups",
+      "night-time",
+      "social-energy",
+      "patio-weather",
+      "after-work"
+    ]
+  }
+]
