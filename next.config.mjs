@@ -23,6 +23,14 @@ const nextConfig = {
       },
       {
         protocol: "https",
+        hostname: "platform.austin.eater.com"
+      },
+      {
+        protocol: "https",
+        hostname: "platform.eater.com"
+      },
+      {
+        protocol: "https",
         hostname: "upload.wikimedia.org"
       }
     ]

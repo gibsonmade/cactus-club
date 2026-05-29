@@ -3,14 +3,14 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Cactus Club",
-  description: "Austin nightlife discovery for tonight's actual mood."
+  description: "Austin food, events, and places in one calm local planner."
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#080706"
+  themeColor: "#09110D"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

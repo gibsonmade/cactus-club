@@ -1,0 +1,269 @@
+[
+  {
+    "title": "The Best Burgers in Austin, Texas",
+    "url": "https://austin.eater.com/maps/best-burgers-austin-restaurants",
+    "slug": "best-burgers-austin-restaurants",
+    "tags": [
+      "burgers"
+    ],
+    "published_at": "2015-04-17T18:13:23+00:00",
+    "updated_at": "2026-05-22T15:05:46+00:00",
+    "place_count": 22
+  },
+  {
+    "title": "The Best Sushi Restaurants in Austin",
+    "url": "https://austin.eater.com/maps/best-sushi-restaurants-austin",
+    "slug": "best-sushi-restaurants-austin",
+    "tags": [
+      "sushi",
+      "japanese"
+    ],
+    "published_at": "2015-07-28T15:01:23+00:00",
+    "updated_at": "2026-05-21T15:00:35+00:00",
+    "place_count": 18
+  },
+  {
+    "title": "The Best New Restaurants in Austin",
+    "url": "https://austin.eater.com/maps/best-new-restaurants-austin-heatmap",
+    "slug": "best-new-restaurants-austin-heatmap",
+    "tags": [
+      "new-restaurant"
+    ],
+    "published_at": "2017-12-07T16:10:19+00:00",
+    "updated_at": "2026-05-07T15:00:17+00:00",
+    "place_count": 18
+  },
+  {
+    "title": "The 38 Best Restaurants in Austin, Spring 2026",
+    "url": "https://austin.eater.com/maps/best-restaurants-austin-eater-38",
+    "slug": "best-restaurants-austin-eater-38",
+    "tags": [
+      "eater-38",
+      "essential"
+    ],
+    "published_at": "2018-01-09T19:17:47+00:00",
+    "updated_at": "2026-04-23T17:21:22+00:00",
+    "place_count": 38
+  },
+  {
+    "title": "The Best Restaurant and Bar Patios in Austin",
+    "url": "https://austin.eater.com/maps/best-patios-austin-restaurants-bars",
+    "slug": "best-patios-austin-restaurants-bars",
+    "tags": [
+      "patio",
+      "outdoor-dining"
+    ],
+    "published_at": "2016-04-23T15:00:03+00:00",
+    "updated_at": "2026-04-23T14:00:28+00:00",
+    "place_count": 21
+  },
+  {
+    "title": "The Best Steakhouses in Austin",
+    "url": "https://austin.eater.com/maps/best-steaks-austin-steakhouses-restaurants",
+    "slug": "best-steaks-austin-steakhouses-restaurants",
+    "tags": [
+      "steak",
+      "steakhouse"
+    ],
+    "published_at": "2015-06-19T21:08:39+00:00",
+    "updated_at": "2026-04-02T15:00:32+00:00",
+    "place_count": 18
+  },
+  {
+    "title": "The Best Pizza in Austin",
+    "url": "https://austin.eater.com/maps/best-pizza-austin-pizzerias-restaurants",
+    "slug": "best-pizza-austin-pizzerias-restaurants",
+    "tags": [
+      "pizza"
+    ],
+    "published_at": "2023-07-05T18:01:29+00:00",
+    "updated_at": "2026-02-26T09:00:35+00:00",
+    "place_count": 18
+  },
+  {
+    "title": "The Best Lunch Restaurants in Austin",
+    "url": "https://austin.eater.com/maps/best-lunches-austin-restaurants",
+    "slug": "best-lunches-austin-restaurants",
+    "tags": [
+      "lunch"
+    ],
+    "published_at": "2022-04-27T15:16:30+00:00",
+    "updated_at": "2026-02-20T16:45:32+00:00",
+    "place_count": 21
+  },
+  {
+    "title": "The Best Italian Restaurants in Austin",
+    "url": "https://austin.eater.com/maps/best-italian-restaurants-austin-pasta-red-sauce-joints",
+    "slug": "best-italian-restaurants-austin-pasta-red-sauce-joints",
+    "tags": [
+      "italian",
+      "pasta"
+    ],
+    "published_at": "2018-07-10T18:56:38+00:00",
+    "updated_at": "2026-02-12T16:52:10+00:00",
+    "place_count": 14
+  },
+  {
+    "title": "The Best South Lamar Restaurants and Bars in Austin",
+    "url": "https://austin.eater.com/maps/south-lamar-austin-best-restaurants-bars-dining-guide-where-to-eat-zilker",
+    "slug": "south-lamar-austin-best-restaurants-bars-dining-guide-where-to-eat-zilker",
+    "tags": [
+      "south-lamar",
+      "neighborhood-guide"
+    ],
+    "published_at": "2018-02-22T22:14:02+00:00",
+    "updated_at": "2026-01-28T16:23:16+00:00",
+    "place_count": 16
+  },
+  {
+    "title": "The Best Coffee in Austin",
+    "url": "https://austin.eater.com/maps/best-coffee-austin-cafes-espressos-lattes",
+    "slug": "best-coffee-austin-cafes-espressos-lattes",
+    "tags": [
+      "coffee",
+      "cafe"
+    ],
+    "published_at": "2015-05-28T20:06:33+00:00",
+    "updated_at": "2025-12-04T20:54:50+00:00",
+    "place_count": 15
+  },
+  {
+    "title": "The Best Dive Bars in Austin",
+    "url": "https://austin.eater.com/maps/best-dive-bars-austin",
+    "slug": "best-dive-bars-austin",
+    "tags": [
+      "dive-bar",
+      "bar"
+    ],
+    "published_at": "2016-02-10T17:13:47+00:00",
+    "updated_at": "2025-11-20T19:29:33+00:00",
+    "place_count": 17
+  },
+  {
+    "title": "The Best Breweries in the Austin Area",
+    "url": "https://austin.eater.com/maps/best-breweries-austin-beer-taprooms-central-texas",
+    "slug": "best-breweries-austin-beer-taprooms-central-texas",
+    "tags": [
+      "brewery",
+      "beer"
+    ],
+    "published_at": "2015-10-02T22:04:12+00:00",
+    "updated_at": "2025-11-18T21:20:55+00:00",
+    "place_count": 19
+  },
+  {
+    "title": "The Best Splurge-Worthy Austin Restaurants",
+    "url": "https://austin.eater.com/maps/best-fine-dining-restaurants-austin-where-to-have-nice-dinners",
+    "slug": "best-fine-dining-restaurants-austin-where-to-have-nice-dinners",
+    "tags": [
+      "fine-dining",
+      "special-occasion"
+    ],
+    "published_at": "2016-12-05T20:00:32+00:00",
+    "updated_at": "2025-11-05T21:54:30+00:00",
+    "place_count": 18
+  },
+  {
+    "title": "Where to Eat and Drink Around the University of Texas at Austin",
+    "url": "https://austin.eater.com/maps/university-of-texas-austin-ut-campus-best-restaurants-bars-where-to-eat",
+    "slug": "university-of-texas-austin-ut-campus-best-restaurants-bars-where-to-eat",
+    "tags": [
+      "ut-campus",
+      "neighborhood-guide"
+    ],
+    "published_at": "2017-08-30T16:00:04+00:00",
+    "updated_at": "2025-10-23T16:55:21+00:00",
+    "place_count": 23
+  },
+  {
+    "title": "11 Fantastic Thai Restaurants in Austin",
+    "url": "https://austin.eater.com/maps/best-thai-restaurants-austin",
+    "slug": "best-thai-restaurants-austin",
+    "tags": [
+      "thai"
+    ],
+    "published_at": "2017-02-27T21:05:39+00:00",
+    "updated_at": "2025-09-16T20:24:50+00:00",
+    "place_count": 11
+  },
+  {
+    "title": "The Best Tex-Mex Restaurants in Austin",
+    "url": "https://austin.eater.com/maps/best-tex-mex-restaurants-austin",
+    "slug": "best-tex-mex-restaurants-austin",
+    "tags": [
+      "tex-mex"
+    ],
+    "published_at": "2017-10-27T16:00:02+00:00",
+    "updated_at": "2025-08-04T20:36:30+00:00",
+    "place_count": 14
+  },
+  {
+    "title": "Rock Out at These Austin Live Music Bars With Drinks and Food",
+    "url": "https://austin.eater.com/maps/best-live-music-austin-concerts-venues-bars",
+    "slug": "best-live-music-austin-concerts-venues-bars",
+    "tags": [
+      "live-music",
+      "bar"
+    ],
+    "published_at": "2016-07-27T17:01:02+00:00",
+    "updated_at": "2025-07-17T15:30:03+00:00",
+    "place_count": 20
+  },
+  {
+    "title": "The Best Indian Restaurants in Austin",
+    "url": "https://austin.eater.com/maps/best-indian-restaurants-austin-south-asian-food",
+    "slug": "best-indian-restaurants-austin-south-asian-food",
+    "tags": [
+      "indian",
+      "south-asian"
+    ],
+    "published_at": "2015-10-20T20:45:34+00:00",
+    "updated_at": "2025-07-14T17:36:30+00:00",
+    "place_count": 17
+  },
+  {
+    "title": "Austin Restaurants With Great Views",
+    "url": "https://austin.eater.com/maps/best-views-austin-restaurants",
+    "slug": "best-views-austin-restaurants",
+    "tags": [
+      "views"
+    ],
+    "published_at": "2015-06-30T15:09:46+00:00",
+    "updated_at": "2025-06-27T13:06:52+00:00",
+    "place_count": 13
+  },
+  {
+    "title": "Where to Eat and Drink on South Congress in Austin",
+    "url": "https://austin.eater.com/maps/south-congress-austin-best-restaurants-bars-dining-guide-where-to-eat-travis-heights-bouldin-creek",
+    "slug": "south-congress-austin-best-restaurants-bars-dining-guide-where-to-eat-travis-heights-bouldin-creek",
+    "tags": [
+      "south-congress",
+      "neighborhood-guide"
+    ],
+    "published_at": "2016-11-21T22:00:01+00:00",
+    "updated_at": "2025-06-24T19:35:13+00:00",
+    "place_count": 15
+  },
+  {
+    "title": "Where to Find the Greatest Sandwiches in Austin",
+    "url": "https://austin.eater.com/maps/best-sandwiches-austin-restaurants",
+    "slug": "best-sandwiches-austin-restaurants",
+    "tags": [
+      "sandwiches"
+    ],
+    "published_at": "2015-10-22T18:46:48+00:00",
+    "updated_at": "2025-06-23T15:19:33+00:00",
+    "place_count": 22
+  },
+  {
+    "title": "The Best Hidden Gem Restaurants in Austin",
+    "url": "https://austin.eater.com/maps/best-restaurants-austin-underrated",
+    "slug": "best-restaurants-austin-underrated",
+    "tags": [
+      "underrated"
+    ],
+    "published_at": "2016-04-21T16:30:03+00:00",
+    "updated_at": "2025-06-09T23:43:17+00:00",
+    "place_count": 12
+  }
+]

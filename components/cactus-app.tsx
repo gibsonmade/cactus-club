@@ -1,20 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import Lottie from "lottie-react";
 import { SafeImage } from "@/components/safe-image";
 import {
+  ArrowRight,
+  Bike,
+  BookOpen,
   CalendarDays,
+  Check,
   ChevronDown,
   CloudRain,
   CloudSun,
   Compass,
+  Copy,
   Droplets,
   Dumbbell,
   Flame,
   Heart,
+  ListPlus,
   Laugh,
   LocateFixed,
   MapPin,
@@ -25,9 +31,13 @@ import {
   PartyPopper,
   RefreshCcw,
   Search,
+  Share2,
   Sparkles,
+  Star,
   Thermometer,
   Trees,
+  Utensils,
+  Users,
   Wind,
   X
 } from "lucide-react";
@@ -39,6 +49,8 @@ import { dayLabel, formatEventTime, isNextWeek, isThisWeekend, isToday, isTomorr
 import type { Area, EventItem, EvergreenEventItem, MoveCompany, MoveEnergy, MoveIntent, MoveVibe, VenueItem, VibeTag } from "@/lib/types";
 import { publicPath } from "@/lib/public-path";
 import { cn, uniq } from "@/lib/utils";
+import { buildOutingRecommendations, buildUnifiedPlaces, placeMatchesQuery, tagToVibeTags, type AtxArticle, type AtxEatPlace, type OutingRecommendation, type UnifiedPlace } from "@/lib/unified";
+import type { AppData } from "@/lib/app-data";
 
 type Tab = "Today" | "Explore" | "Plan" | "Places";
 
@@ -96,6 +108,11 @@ const areaFilters: Area[] = ["East Side", "Downtown", "Central", "Barton/Zilker"
 
 const fallbackImage = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1600&auto=format&fit=crop";
 const austinLocation = { latitude: 30.2672, longitude: -97.7431 };
+const defaultCustomPlaceLists = {
+  "Need to Try": [],
+  "Date Night": [],
+  "Friends": []
+};
 
 function areaLabel(area: Area | "All") {
   return area === "Burbs" ? "Suburbs" : area;
@@ -112,12 +129,6 @@ const neighborhoodOptions: Array<{ label: string; value: string; location?: User
   { label: "Mueller", value: "mueller", area: "Central", location: { latitude: 30.2976, longitude: -97.7046 } }
 ];
 
-type AppData = {
-  events: EventItem[];
-  venues: VenueItem[];
-  evergreenEvents: EvergreenEventItem[];
-};
-
 type WeatherState = {
   temperature: number;
   code: number;
@@ -126,43 +137,83 @@ type WeatherState = {
   label: string;
 };
 
+type FriendTasteProfile = {
+  id: string;
+  name: string;
+  saved: string[];
+  visited?: string[];
+  tasteTags: string[];
+  location?: { lat: number; lng: number; label?: string };
+  exportedAt?: string;
+};
+
 let appDataCache: AppData | undefined;
 let appDataPromise: Promise<AppData> | undefined;
 
-function loadAppData() {
-  if (appDataCache) return Promise.resolve(appDataCache);
+function loadAppData({ forceFull = false }: { forceFull?: boolean } = {}) {
+  if (appDataCache && (!forceFull || !appDataCache.isPartial)) return Promise.resolve(appDataCache);
   if (!appDataPromise) {
     appDataPromise = Promise.all([
       fetch(publicPath("/data/events.json")).then((response) => response.json() as Promise<EventItem[]>),
       fetch(publicPath("/data/venues.json")).then((response) => response.json() as Promise<VenueItem[]>),
       fetch(publicPath("/data/evergreen-events.json"))
         .then((response) => (response.ok ? response.json() : []))
-        .catch(() => []) as Promise<EvergreenEventItem[]>
-    ]).then(([events, venues, evergreenEvents]) => {
-      appDataCache = { events, venues, evergreenEvents };
+        .catch(() => []) as Promise<EvergreenEventItem[]>,
+      fetch(publicPath("/data/atx-eats/places.json"))
+        .then((response) => (response.ok ? response.json() : []))
+        .catch(() => []) as Promise<AtxEatPlace[]>,
+      fetch(publicPath("/data/atx-eats/articles.json"))
+        .then((response) => (response.ok ? response.json() : []))
+        .catch(() => []) as Promise<AtxArticle[]>
+    ]).then(([events, venues, evergreenEvents, restaurants, articles]) => {
+      appDataCache = { events, venues, evergreenEvents, restaurants, articles, isPartial: false };
       return appDataCache;
     });
   }
   return appDataPromise;
 }
 
-export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
+function readStoredLocation() {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const stored = window.localStorage.getItem("userLocation");
+    return stored ? (JSON.parse(stored) as UserLocation) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readStoredLocationLabel() {
+  if (typeof window === "undefined") return "Nearby";
+  return window.localStorage.getItem("userLocationLabel") ?? "Nearby";
+}
+
+export function CactusApp({ initialTab = "Today", initialData }: { initialTab?: Tab; initialData?: AppData }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const cachedData = initialData ?? appDataCache;
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
-  const [initialEvents, setInitialEvents] = useState<EventItem[]>([]);
-  const [initialVenues, setInitialVenues] = useState<VenueItem[]>([]);
-  const [initialEvergreenEvents, setInitialEvergreenEvents] = useState<EvergreenEventItem[]>([]);
-  const [dataReady, setDataReady] = useState(false);
+  const [initialEvents, setInitialEvents] = useState<EventItem[]>(() => cachedData?.events ?? []);
+  const [initialVenues, setInitialVenues] = useState<VenueItem[]>(() => cachedData?.venues ?? []);
+  const [initialEvergreenEvents, setInitialEvergreenEvents] = useState<EvergreenEventItem[]>(() => cachedData?.evergreenEvents ?? []);
+  const [initialRestaurants, setInitialRestaurants] = useState<AtxEatPlace[]>(() => cachedData?.restaurants ?? []);
+  const [initialArticles, setInitialArticles] = useState<AtxArticle[]>(() => cachedData?.articles ?? []);
+  const [dataReady, setDataReady] = useState(() => Boolean(cachedData));
   const [savedEvents, setSavedEvents] = useStoredIds("savedEvents");
   const [savedVenues, setSavedVenues] = useStoredIds("savedVenues");
+  const [savedPlaces, setSavedPlaces] = useStoredIds("savedPlaces");
+  const [visitedPlaces, setVisitedPlaces] = useStoredIds("visitedPlaces");
+  const [friendProfiles, setFriendProfiles] = useStoredJson<FriendTasteProfile[]>("friendProfiles", []);
+  const [customLists, setCustomLists] = useStoredJson<Record<string, string[]>>("customPlaceLists", defaultCustomPlaceLists);
   const [hiddenEvents] = useStoredIds("hiddenEvents");
   const [preferredVibes, setPreferredVibes] = useStoredArray<VibeTag>("preferredVibes");
   const [preferredAreas, setPreferredAreas] = useStoredArray<Area>("preferredAreas");
-  const [userLocation, setUserLocation] = useState<UserLocation | undefined>();
-  const [locationLabel, setLocationLabel] = useState("Nearby");
+  const [userLocation, setUserLocation] = useState<UserLocation | undefined>(() => readStoredLocation());
+  const [locationLabel, setLocationLabel] = useState(() => readStoredLocationLabel());
   const [weather, setWeather] = useState<WeatherState | null>(null);
   const [detailEvent, setDetailEvent] = useState<EventItem | null>(null);
-  const savedPlanCount = savedEvents.length + savedVenues.length;
+  const [detailPlace, setDetailPlace] = useState<UnifiedPlace | null>(null);
+  const savedPlanCount = savedEvents.length + savedVenues.length + savedPlaces.length;
   const previousSavedPlanCount = useRef<number | null>(null);
   const [planPulse, setPlanPulse] = useState(0);
 
@@ -171,14 +222,57 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
   }, [initialTab]);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  useEffect(() => {
     let active = true;
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    function applyData({ events, venues, evergreenEvents, restaurants, articles }: AppData) {
+      if (!active) return;
+      setInitialEvents(events);
+      setInitialVenues(venues);
+      setInitialEvergreenEvents(evergreenEvents);
+      setInitialRestaurants(restaurants);
+      setInitialArticles(articles);
+      setDataReady(true);
+    }
+
+    if (initialData) {
+      if (!appDataCache || !initialData.isPartial) appDataCache = initialData;
+      applyData(initialData);
+      if (!initialData.isPartial) {
+        return () => {
+          active = false;
+        };
+      }
+
+      const hydrateFullData = () => {
+        loadAppData({ forceFull: true })
+          .then(applyData)
+          .catch(() => {
+            if (active) setDataReady(true);
+          });
+      };
+
+      if ("requestIdleCallback" in window) {
+        idleId = window.requestIdleCallback(hydrateFullData, { timeout: 2200 });
+      } else {
+        timeoutId = setTimeout(hydrateFullData, 900);
+      }
+
+      return () => {
+        active = false;
+        if (idleId !== undefined && "cancelIdleCallback" in window) window.cancelIdleCallback(idleId);
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+    }
+
     loadAppData()
-      .then(({ events, venues, evergreenEvents }) => {
-        if (!active) return;
-        setInitialEvents(events);
-        setInitialVenues(venues);
-        setInitialEvergreenEvents(evergreenEvents);
-        setDataReady(true);
+      .then(({ events, venues, evergreenEvents, restaurants, articles }) => {
+        applyData({ events, venues, evergreenEvents, restaurants, articles });
       })
       .catch(() => {
         if (active) setDataReady(true);
@@ -186,18 +280,7 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
     return () => {
       active = false;
     };
-  }, []);
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem("userLocation");
-      if (stored) setUserLocation(JSON.parse(stored));
-      const storedLabel = window.localStorage.getItem("userLocationLabel");
-      if (storedLabel) setLocationLabel(storedLabel);
-    } catch {
-      setUserLocation(undefined);
-    }
-  }, []);
+  }, [initialData]);
 
   useEffect(() => {
     const location = userLocation ?? austinLocation;
@@ -234,6 +317,22 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
   const upcomingEvents = useMemo(() => distanceData.events.filter((event) => isUpcoming(event)).sort(sortSoonest), [distanceData.events]);
   const visibleEvents = useMemo(() => upcomingEvents.filter((event) => !hiddenEvents.includes(event.id)), [hiddenEvents, upcomingEvents]);
   const venues = useMemo(() => distanceData.venues.filter((venue) => venue.upcomingCount > 0 || (venue.evergreenCount ?? 0) > 0), [distanceData.venues]);
+  const unifiedPlaces = useMemo(
+    () => buildUnifiedPlaces({ restaurants: initialRestaurants, venues, events: upcomingEvents, userLocation }),
+    [initialRestaurants, upcomingEvents, userLocation, venues]
+  );
+  const savedUnifiedPlaces = useMemo(
+    () => unifiedPlaces.filter((place) => savedPlaces.includes(place.id) || savedVenues.includes(place.sourceId)),
+    [savedPlaces, savedVenues, unifiedPlaces]
+  );
+  const outingRecommendations = useMemo(
+    () => buildOutingRecommendations(visibleEvents, unifiedPlaces),
+    [unifiedPlaces, visibleEvents]
+  );
+
+  useEffect(() => {
+    migrateAtxEatsState(setSavedPlaces, setVisitedPlaces, setCustomLists, setFriendProfiles, setPreferredVibes);
+  }, [setCustomLists, setFriendProfiles, setPreferredVibes, setSavedPlaces, setVisitedPlaces]);
 
   useEffect(() => {
     if (!dataReady || !initialEvents.length) return;
@@ -261,6 +360,29 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
     setSavedVenues((current) => (current.includes(id) ? current.filter((venueId) => venueId !== id) : [...current, id]));
   }
 
+  function toggleSavedPlace(id: string) {
+    setSavedPlaces((current) => (current.includes(id) ? current.filter((placeId) => placeId !== id) : [...current, id]));
+  }
+
+  function toggleVisitedPlace(id: string) {
+    setVisitedPlaces((current) => (current.includes(id) ? current.filter((placeId) => placeId !== id) : [...current, id]));
+  }
+
+  function addPlaceToList(listName: string, placeId: string) {
+    setCustomLists((current) => ({
+      ...current,
+      [listName]: uniq([...(current[listName] ?? []), placeId])
+    }));
+    setSavedPlaces((current) => uniq([placeId, ...current]));
+  }
+
+  function removePlaceFromList(listName: string, placeId: string) {
+    setCustomLists((current) => ({
+      ...current,
+      [listName]: (current[listName] ?? []).filter((id) => id !== placeId)
+    }));
+  }
+
   function requestLocation() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -273,10 +395,7 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
         window.localStorage.setItem("userLocationLabel", "Current location");
         setUserLocation(nextLocation);
         setLocationLabel("Current location");
-        if (activeTab !== "Places") {
-          setActiveTab("Explore");
-          router.push("/explore?date=Nearby");
-        }
+        if (activeTab !== "Places") router.push("/explore?date=Nearby");
       },
       () => setUserLocation(undefined),
       { enableHighAccuracy: false, timeout: 6000 }
@@ -293,16 +412,13 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
     window.localStorage.setItem("userLocationLabel", option.label);
     setUserLocation(option.location);
     setLocationLabel(option.label);
-    if (activeTab !== "Places") {
-      setActiveTab("Explore");
-      router.push(option.area ? `/explore?area=${encodeURIComponent(option.area)}` : "/explore");
-    }
+    if (activeTab !== "Places") router.push(option.area ? `/explore?area=${encodeURIComponent(option.area)}` : "/explore");
   }
 
   return (
-    <main className="min-h-screen pb-24 text-bone md:pb-0">
+    <main className="relative mx-auto min-h-screen w-full max-w-[1120px] px-4 pb-24 pt-4 text-bone sm:px-6 md:pb-10">
       <AmbientChrome activeTab={activeTab} locationLabel={locationLabel} locationEnabled={Boolean(userLocation)} savedPlanCount={savedPlanCount} planPulse={planPulse} onNeighborhood={selectNeighborhood} />
-      <div className="mx-auto w-full max-w-7xl px-4 pt-5 sm:px-6 lg:px-8">
+      <section className="w-full">
         <AnimatePresence mode="wait">
           {!dataReady ? (
             <AppLoadingSkeleton />
@@ -313,14 +429,15 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
               events={visibleEvents}
               preferredVibes={preferredVibes}
               preferredAreas={preferredAreas}
-              locationEnabled={Boolean(userLocation)}
               weather={weather}
-              venues={venues}
-              evergreenEvents={initialEvergreenEvents}
+              places={unifiedPlaces}
+              articles={initialArticles}
               savedEvents={savedEvents}
               savedVenues={savedVenues}
+              savedPlaces={savedPlaces}
               onSave={toggleSavedEvent}
-              onSaveVenue={toggleSavedVenue}
+              onSavePlace={toggleSavedPlace}
+              onOpenPlace={setDetailPlace}
               onOpenDetails={setDetailEvent}
             />
           ) : null}
@@ -328,9 +445,16 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
             <ExploreView
               key="explore"
               events={visibleEvents}
+              places={unifiedPlaces}
+              articles={initialArticles}
               locationEnabled={Boolean(userLocation)}
               savedEvents={savedEvents}
+              savedPlaces={savedPlaces}
+              visitedPlaces={visitedPlaces}
               onSave={toggleSavedEvent}
+              onSavePlace={toggleSavedPlace}
+              onVisitPlace={toggleVisitedPlace}
+              onOpenPlace={setDetailPlace}
               onOpenDetails={setDetailEvent}
               onPreferredArea={setPreferredAreas}
               onPreferredVibe={setPreferredVibes}
@@ -343,10 +467,21 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
               key="plan"
               events={upcomingEvents}
               venues={venues}
+              places={unifiedPlaces}
+              savedPlaces={savedPlaces}
+              visitedPlaces={visitedPlaces}
+              customLists={customLists}
+              friendProfiles={friendProfiles}
               savedEvents={savedEvents}
               savedVenues={savedVenues}
               onSaveEvent={toggleSavedEvent}
               onSaveVenue={toggleSavedVenue}
+              onSavePlace={toggleSavedPlace}
+              onVisitPlace={toggleVisitedPlace}
+              onOpenPlace={setDetailPlace}
+              onAddPlaceToList={addPlaceToList}
+              onRemovePlaceFromList={removePlaceFromList}
+              onFriendProfiles={setFriendProfiles}
               onOpenDetails={setDetailEvent}
             />
           ) : null}
@@ -355,15 +490,36 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
               key="venues"
               events={visibleEvents}
               venues={venues}
+              places={unifiedPlaces}
               locationEnabled={Boolean(userLocation)}
               savedVenues={savedVenues}
+              savedPlaces={savedPlaces}
               onSaveVenue={toggleSavedVenue}
+              onSavePlace={toggleSavedPlace}
+              onOpenPlace={setDetailPlace}
             />
           ) : null}
         </AnimatePresence>
-      </div>
-      <AppFooter />
-      <EventDetailDrawer event={detailEvent} onClose={() => setDetailEvent(null)} />
+      </section>
+      {activeTab !== "Today" ? <AppFooter /> : null}
+      <EventDetailDrawer
+        event={detailEvent}
+        nearbyPlaces={detailEvent ? unifiedPlaces.filter((place) => place.kind === "restaurant" && place.area === detailEvent.area).slice(0, 3) : []}
+        onClose={() => setDetailEvent(null)}
+        onOpenPlace={setDetailPlace}
+      />
+      <PlaceDetailDrawer
+        place={detailPlace}
+        events={detailPlace ? upcomingEvents.filter((event) => detailPlace.upcomingEventIds.includes(event.id)).slice(0, 5) : []}
+        listNames={Object.keys(customLists)}
+        saved={detailPlace ? savedPlaces.includes(detailPlace.id) || savedVenues.includes(detailPlace.sourceId) : false}
+        visited={detailPlace ? visitedPlaces.includes(detailPlace.id) : false}
+        onClose={() => setDetailPlace(null)}
+        onSave={toggleSavedPlace}
+        onVisit={toggleVisitedPlace}
+        onAddToList={addPlaceToList}
+        onOpenDetails={setDetailEvent}
+      />
       <nav className="fixed inset-x-0 bottom-0 z-50 px-3 pb-3 pt-2 md:hidden">
         <div className="glass-panel mx-auto grid max-w-md grid-cols-4 gap-1 rounded-[1.65rem] p-1.5">
           {tabs.map((tab) => {
@@ -373,11 +529,10 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
               <Link
                 className={cn(
                   "relative flex h-14 flex-col items-center justify-center gap-1 rounded-[1.15rem] text-[11px] font-bold transition",
-                  active ? "bg-bone text-ink shadow-[0_10px_30px_rgba(248,240,223,0.14)]" : "text-bone/58 hover:bg-white/8 hover:text-bone"
+                  active ? "bg-white/70 text-ink shadow-[0_10px_30px_rgba(48,209,88,0.18)]" : "text-emerald-950 hover:bg-white/56"
                 )}
                 href={tab.href}
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
               >
                 <motion.span
                   animate={isPlan && planPulse ? { scale: [1, 1.26, 1], y: [0, -2, 0] } : { scale: 1, y: 0 }}
@@ -397,19 +552,11 @@ export function CactusApp({ initialTab = "Today" }: { initialTab?: Tab }) {
 }
 
 function useStoredArray<T extends string>(key: string) {
-  const [items, setItems] = useState<T[]>([]);
-  useEffect(() => {
-    try {
-      const value = window.localStorage.getItem(key);
-      if (value) setItems(JSON.parse(value));
-    } catch {
-      setItems([]);
-    }
-  }, [key]);
+  const [items, setItems] = useState<T[]>(() => readStoredJsonValue<T[]>(key, []));
   const update = useCallback((next: T[] | ((current: T[]) => T[])) => {
     setItems((current) => {
       const resolved = typeof next === "function" ? next(current) : next;
-      window.localStorage.setItem(key, JSON.stringify(resolved));
+      if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(resolved));
       return resolved;
     });
   }, [key]);
@@ -420,9 +567,86 @@ function useStoredIds(key: string) {
   return useStoredArray<string>(key);
 }
 
+function useStoredJson<T>(key: string, fallback: T) {
+  const [item, setItem] = useState<T>(() => readStoredJsonValue<T>(key, fallback));
+  const update = useCallback((next: T | ((current: T) => T)) => {
+    setItem((current) => {
+      const resolved = typeof next === "function" ? (next as (current: T) => T)(current) : next;
+      if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(resolved));
+      return resolved;
+    });
+  }, [key]);
+  return [item, update] as const;
+}
+
+function readStoredJsonValue<T>(key: string, fallback: T) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const value = window.localStorage.getItem(key);
+    return value ? (JSON.parse(value) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function migrateAtxEatsState(
+  setSavedPlaces: (next: string[] | ((current: string[]) => string[])) => void,
+  setVisitedPlaces: (next: string[] | ((current: string[]) => string[])) => void,
+  setCustomLists: (next: Record<string, string[]> | ((current: Record<string, string[]>) => Record<string, string[]>)) => void,
+  setFriendProfiles: (next: FriendTasteProfile[] | ((current: FriendTasteProfile[]) => FriendTasteProfile[])) => void,
+  setPreferredVibes: (next: VibeTag[] | ((current: VibeTag[]) => VibeTag[])) => void
+) {
+  try {
+    if (window.localStorage.getItem("atx-eats-migrated-to-cactus-v1")) return;
+    const raw = window.localStorage.getItem("atx-eats-state-v1");
+    if (!raw) {
+      window.localStorage.setItem("atx-eats-migrated-to-cactus-v1", "1");
+      return;
+    }
+    const parsed = JSON.parse(raw) as {
+      saved?: string[];
+      visited?: string[];
+      lists?: Record<string, string[]>;
+      friendProfiles?: FriendTasteProfile[];
+      tasteTags?: string[];
+    };
+    const saved = (parsed.saved ?? []).map((id) => `food:${id}`);
+    const visited = (parsed.visited ?? []).map((id) => `food:${id}`);
+    setSavedPlaces((current) => uniq([...saved, ...current]));
+    setVisitedPlaces((current) => uniq([...visited, ...current]));
+    if (parsed.lists) {
+      setCustomLists((current) => {
+        const next = { ...current };
+        for (const [name, ids] of Object.entries(parsed.lists ?? {})) {
+          next[name] = uniq([...(next[name] ?? []), ...ids.map((id) => `food:${id}`)]);
+        }
+        return next;
+      });
+    }
+    if (parsed.friendProfiles?.length) {
+      setFriendProfiles((current) => uniqBy([...current, ...parsed.friendProfiles!], (profile) => profile.id));
+    }
+    const migratedVibes = tagToVibeTags(parsed.tasteTags ?? []);
+    if (migratedVibes.length) setPreferredVibes((current) => uniq([...migratedVibes, ...current]).slice(0, 8));
+    window.localStorage.setItem("atx-eats-migrated-to-cactus-v1", "1");
+  } catch {
+    window.localStorage.setItem("atx-eats-migrated-to-cactus-v1", "1");
+  }
+}
+
+function uniqBy<T>(items: T[], key: (item: T) => string) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const value = key(item);
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
 function AppFooter() {
   return (
-    <footer className="mx-auto mt-16 w-full max-w-7xl px-4 pb-28 sm:px-6 lg:px-8 md:pb-12">
+    <footer className="mt-12 w-full pb-28 md:pb-4">
       <div className="glass-panel rounded-[1.5rem] p-6 text-center">
         <p className="text-xs font-black uppercase tracking-[0.24em] text-neon">Cactus Club</p>
         <p className="mt-2 text-sm font-bold text-bone/58">End of the list. Go make the plan.</p>
@@ -433,7 +657,7 @@ function AppFooter() {
 
 function AppLoadingSkeleton() {
   return (
-    <motion.section {...viewMotion} className="space-y-8 pt-6 md:pt-10">
+    <motion.section {...viewMotion} className="min-h-[calc(100vh-9rem)] space-y-8 pt-6 md:pt-10">
       <section className="glass-panel overflow-hidden rounded-[1.75rem] p-4">
         <div className="grid gap-4 md:grid-cols-[340px_1fr]">
           <div className="soft-shimmer h-[360px] rounded-[1.25rem] bg-white/10" />
@@ -482,9 +706,9 @@ function PlanCountBadge({ count, pulse, active, compact = false }: { count: numb
       animate={{ scale: [1, 1.28, 1], y: [0, -3, 0] }}
       transition={{ duration: 0.38, ease: "easeOut" }}
       className={cn(
-        "grid place-items-center rounded-full text-[10px] font-black shadow-[0_0_22px_rgba(214,255,79,0.32)]",
+        "grid place-items-center rounded-full text-[10px] font-black shadow-[0_8px_24px_rgba(48,209,88,0.28)]",
         compact ? "absolute right-2 top-1 h-5 min-w-5 px-1" : "h-5 min-w-5 px-1.5",
-        active ? "bg-neon text-ink" : "bg-neon text-ink"
+        active ? "bg-neon text-emerald-950" : "bg-neon text-emerald-950"
       )}
       aria-label={`${count} saved plan items`}
     >
@@ -510,21 +734,21 @@ function AmbientChrome({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-night/72 shadow-[0_18px_60px_rgba(0,0,0,0.22)] backdrop-blur-2xl">
-      <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <Link className="min-w-0" href="/today">
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-neon/85">Cactus Club</p>
+    <header className="glass-panel sticky top-3 z-50 mb-5 flex min-h-[66px] items-center gap-3 rounded-full px-3 py-2 md:top-4 md:mb-7">
+        <Link className="flex min-h-11 shrink-0 items-center gap-2 rounded-full px-3 text-neon transition hover:bg-white/12" href="/today">
+          <Utensils className="h-5 w-5" />
+          <p className="hidden text-lg font-black tracking-[-0.02em] sm:block">Cactus Club</p>
         </Link>
 
-        <nav className="glass-panel hidden rounded-full p-1 md:flex">
+        <nav className="hidden flex-1 items-center justify-end gap-1 overflow-x-auto md:flex">
           {tabs.map((tab) => {
             const active = activeTab === tab.id;
             const isPlan = tab.id === "Plan";
             return (
               <Link
                 className={cn(
-                  "relative inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition",
-                  active ? "bg-bone text-ink shadow-[0_10px_32px_rgba(248,240,223,0.14)]" : "text-bone/60 hover:bg-white/8 hover:text-bone"
+                  "relative inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-black transition",
+                  active ? "bg-white/76 text-ink shadow-[0_10px_32px_rgba(48,209,88,0.18)]" : "text-emerald-950 hover:bg-white/56"
                 )}
                 href={tab.href}
                 key={tab.id}
@@ -542,13 +766,13 @@ function AmbientChrome({
           })}
         </nav>
 
-        <div className="relative shrink-0">
+        <div className="relative ml-auto shrink-0 md:ml-0">
           <button
-            className="inline-flex max-w-[44vw] items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-2 text-xs font-bold text-bone/80 backdrop-blur-xl transition hover:bg-white/14 md:max-w-none"
+            className="inline-flex max-w-[46vw] items-center gap-2 rounded-full border border-white/60 bg-white/78 px-3 py-2 text-xs font-black text-emerald-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-xl transition hover:bg-white md:max-w-none"
             onClick={() => setOpen(!open)}
             aria-expanded={open}
           >
-            <LocateFixed className="h-4 w-4 shrink-0 text-neon" />
+            <LocateFixed className="h-4 w-4 shrink-0 text-emerald-100" />
             <span className="truncate">{locationEnabled ? locationLabel : "Nearby"}</span>
             <ChevronDown className={cn("h-4 w-4 shrink-0 transition", open && "rotate-180")} />
           </button>
@@ -558,11 +782,11 @@ function AmbientChrome({
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                className="absolute right-0 top-12 z-[90] w-60 overflow-hidden rounded-2xl border border-white/18 bg-[#080706] p-2 text-bone shadow-[0_24px_80px_rgba(0,0,0,0.72)] ring-1 ring-neon/10"
+                className="absolute right-0 top-12 z-[90] w-60 overflow-hidden rounded-[1.35rem] border border-white/70 bg-white/90 p-2 text-ink shadow-[0_24px_80px_rgba(0,0,0,0.24)] ring-1 ring-white/50 backdrop-blur-2xl"
               >
                 {neighborhoodOptions.map((option) => (
                   <button
-                    className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm font-bold text-bone/82 transition hover:bg-white/12 hover:text-bone focus:outline-none focus:ring-2 focus:ring-neon/40"
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm font-bold text-ink/76 transition hover:bg-emerald-50 hover:text-ink focus:outline-none focus:ring-2 focus:ring-neon/40"
                     key={option.value}
                     onClick={() => {
                       onNeighborhood(option);
@@ -577,7 +801,6 @@ function AmbientChrome({
             ) : null}
           </AnimatePresence>
         </div>
-      </div>
     </header>
   );
 }
@@ -586,31 +809,31 @@ function UpcomingView({
   events,
   preferredAreas,
   preferredVibes,
-  locationEnabled,
   weather,
-  venues,
-  evergreenEvents,
+  places,
+  articles,
   savedEvents,
   savedVenues,
+  savedPlaces,
   onSave,
-  onSaveVenue,
+  onSavePlace,
+  onOpenPlace,
   onOpenDetails
 }: {
   events: EventItem[];
   preferredAreas: Area[];
   preferredVibes: VibeTag[];
-  locationEnabled: boolean;
   weather: WeatherState | null;
-  venues: VenueItem[];
-  evergreenEvents: EvergreenEventItem[];
+  places: UnifiedPlace[];
+  articles: AtxArticle[];
   savedEvents: string[];
   savedVenues: string[];
+  savedPlaces: string[];
   onSave: (id: string) => void;
-  onSaveVenue: (id: string) => void;
+  onSavePlace: (id: string) => void;
+  onOpenPlace: (place: UnifiedPlace) => void;
   onOpenDetails: (event: EventItem) => void;
 }) {
-  const [window, setWindow] = useState<"Today" | "Tomorrow" | "Weekend" | "Next week">("Today");
-  const [chapterCount, setChapterCount] = useState(3);
   const upcomingWindow = useMemo(() => {
     const focused = events.filter((event) => isToday(event) || isTomorrow(event) || isThisWeekend(event) || isNextWeek(event));
     return focused.length ? focused : events.slice(0, 60);
@@ -619,73 +842,81 @@ function UpcomingView({
     () => [...upcomingWindow].sort((a, b) => personalizedScore(b, preferredVibes, preferredAreas) - personalizedScore(a, preferredVibes, preferredAreas)),
     [preferredAreas, preferredVibes, upcomingWindow]
   );
-  const popularToday = useMemo(() => {
-    const todayPopular = [...events.filter((event) => isToday(event))]
-      .sort((a, b) => b.popularityScore - a.popularityScore || b.attendeeCount - a.attendeeCount || personalizedScore(b, preferredVibes, preferredAreas) - personalizedScore(a, preferredVibes, preferredAreas))
-      .slice(0, 3);
-    return todayPopular.length >= 3 ? todayPopular : ranked.slice(0, 3);
+  const rightNowEvents = useMemo(() => {
+    const immediate = events.filter((event) => isTonight(event) || isToday(event));
+    const source = immediate.length >= 6 ? immediate : [...immediate, ...ranked.filter((event) => !immediate.some((item) => item.id === event.id))];
+    return dedupeHomepageEvents([...source]
+      .sort((a, b) => {
+        const aUrgency = isTonight(a) ? 40 : isToday(a) ? 24 : 0;
+        const bUrgency = isTonight(b) ? 40 : isToday(b) ? 24 : 0;
+        return (
+          personalizedScore(b, preferredVibes, preferredAreas) + b.popularityScore + b.attendeeCount / 18 + bUrgency -
+          (personalizedScore(a, preferredVibes, preferredAreas) + a.popularityScore + a.attendeeCount / 18 + aUrgency)
+        );
+      }))
+      .slice(0, 12);
   }, [events, preferredAreas, preferredVibes, ranked]);
-  const hero = popularToday[0];
-  const support = popularToday.slice(1, 3);
-  const today = upcomingWindow.filter((event) => isToday(event));
-  const tomorrow = upcomingWindow.filter((event) => isTomorrow(event));
-  const weekend = upcomingWindow.filter((event) => isThisWeekend(event));
-  const nextWeek = upcomingWindow.filter((event) => isNextWeek(event));
-  const windowEvents = {
-    Today: today,
-    Tomorrow: tomorrow,
-    Weekend: weekend,
-    "Next week": nextWeek
-  }[window].slice(0, 6);
-  const weatherEvents = useMemo(() => weatherMatchedEvents(today, weather).slice(0, 5), [today, weather]);
-  useEffect(() => {
-    setChapterCount(3);
-    const timers = [globalThis.setTimeout(() => setChapterCount(4), 260), globalThis.setTimeout(() => setChapterCount(5), 520), globalThis.setTimeout(() => setChapterCount(6), 780)];
-    return () => timers.forEach((timer) => globalThis.clearTimeout(timer));
-  }, []);
+  const fallbackUpcomingEvents = useMemo(() => dedupeHomepageEvents(ranked.filter((event) => !rightNowEvents.some((item) => item.id === event.id))).slice(0, 8), [ranked, rightNowEvents]);
+  const spotlightEvents = rightNowEvents.length ? rightNowEvents : fallbackUpcomingEvents;
+  const hero = spotlightEvents[0];
+  const foodAddOns = useMemo(
+    () =>
+      places
+        .filter((place) => place.kind === "restaurant" || place.kind === "bar")
+        .sort((a, b) => {
+          const areaBoostA = hero && a.area === hero.area ? 40 : 0;
+          const areaBoostB = hero && b.area === hero.area ? 40 : 0;
+          return areaBoostB + b.popularityScore - (areaBoostA + a.popularityScore) || (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99);
+        })
+        .slice(0, 10),
+    [hero, places]
+  );
+  const restaurants = useMemo(() => places.filter((place) => place.kind === "restaurant"), [places]);
+  const nearbyContextPlaces = useMemo(
+    () =>
+      [...places]
+        .filter((place) => place.kind === "restaurant" || place.kind === "bar" || place.kind === "venue" || place.kind === "park")
+        .sort((a, b) => (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99) || b.popularityScore - a.popularityScore)
+        .slice(0, 10),
+    [places]
+  );
+  const balancedPopularPlaces = useMemo(
+    () =>
+      [...places]
+        .sort((a, b) => b.upcomingCount * 8 + b.popularityScore - (a.upcomingCount * 8 + a.popularityScore))
+        .slice(0, 8),
+    [places]
+  );
+  const beforeAfterPlaces = useMemo(
+    () =>
+      restaurants
+        .filter((place) => place.price === "$" || /happy hour|lunch|breakfast|brunch|cheap|taco|burger|sandwich/i.test(`${place.openFor} ${place.notes} ${place.vibe}`))
+        .slice(0, 4),
+    [restaurants]
+  );
+  const articleCards = useMemo(() => articles.slice(0, 3), [articles]);
+
   return (
-    <motion.section {...viewMotion} className="space-y-14 md:space-y-20">
-      <NarrativeChapter eyebrow={timeGreeting()} title="Start with the day in front of you." copy="Weather, timing, and mood come first. The feed gets wider only after the obvious moves are clear." />
-      <WeatherPlanSection weather={weather} events={weatherEvents} savedEvents={savedEvents} onSave={onSave} onOpenDetails={onOpenDetails} />
-      <CategoryJumpGrid events={events} />
-      {chapterCount >= 3 ? <MoveMaker events={upcomingWindow.slice(0, 80)} savedEvents={savedEvents} onSave={onSave} onOpenDetails={onOpenDetails} /> : <NarrativeSkeleton />}
-      <section>
-        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <SectionHeader kicker="Timeline" title="Make your plan" />
-          <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
-            {(["Today", "Tomorrow", "Weekend", "Next week"] as const).map((item) => (
-              <button
-                className={cn("shrink-0 rounded-full px-4 py-2 text-xs font-black transition", window === item ? "bg-neon text-ink" : "bg-white/8 text-bone/64 hover:bg-white/14 hover:text-bone")}
-                key={item}
-                onClick={() => setWindow(item)}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
-        </div>
-        <FullBleedRail>
-          {windowEvents.map((event) => (
-            <div className="w-[76vw] shrink-0 snap-start sm:w-[330px]" key={event.id}>
-              <EventCard event={event} saved={savedEvents.includes(event.id)} onSave={onSave} onOpenDetails={onOpenDetails} />
-            </div>
-          ))}
-        </FullBleedRail>
-        {!windowEvents.length ? <EmptyPanel message="Nothing in this window yet." /> : null}
-      </section>
-      {chapterCount >= 4 ? <MoodRails events={events} savedEvents={savedEvents} onSave={onSave} onOpenDetails={onOpenDetails} /> : <NarrativeSkeleton />}
-      {chapterCount >= 5 ? <EvergreenDiscovery evergreenEvents={evergreenEvents} venues={venues} savedVenues={savedVenues} onSaveVenue={onSaveVenue} /> : null}
-      {chapterCount >= 6 ? <section>
-        <SectionHeader kicker="Popular today" title="Don’t miss out" />
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          {hero ? <EventCard event={hero} size="hero" saved={savedEvents.includes(hero.id)} onSave={onSave} onOpenDetails={onOpenDetails} /> : <EmptyPanel />}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-            {support.map((event) => (
-              <EventCard event={event} key={event.id} size="compact" saved={savedEvents.includes(event.id)} onSave={onSave} onOpenDetails={onOpenDetails} />
-            ))}
-          </div>
-        </div>
-      </section> : null}
+    <motion.section {...viewMotion} className="landing-page space-y-14 md:space-y-20">
+      <RightNowHero
+        events={spotlightEvents}
+        eventCount={events.length}
+        savedCount={savedEvents.length + savedVenues.length + savedPlaces.length}
+        weather={weather}
+        savedEvents={savedEvents}
+        onSaveEvent={onSave}
+        onOpenDetails={onOpenDetails}
+      />
+      <TonightEventStrip events={spotlightEvents} savedEvents={savedEvents} onSaveEvent={onSave} onOpenDetails={onOpenDetails} />
+      <PlanAroundThis event={hero} places={foodAddOns} savedPlaces={savedPlaces} onSavePlace={onSavePlace} onOpenPlace={onOpenPlace} onOpenDetails={onOpenDetails} />
+      <CategoryCarousel events={events} places={places} />
+      <PopularGrid places={balancedPopularPlaces} events={spotlightEvents} savedPlaces={savedPlaces} savedEvents={savedEvents} onSavePlace={onSavePlace} onSaveEvent={onSave} onOpenPlace={onOpenPlace} onOpenDetails={onOpenDetails} />
+      <NearbyContextStrip places={nearbyContextPlaces} savedPlaces={savedPlaces} onSavePlace={onSavePlace} onOpenPlace={onOpenPlace} />
+      <BeforeAfterSection places={beforeAfterPlaces} savedPlaces={savedPlaces} onSavePlace={onSavePlace} onOpenPlace={onOpenPlace} />
+      <GradientCtaBanner />
+      <FeaturePanel places={foodAddOns} event={hero} onOpenPlace={onOpenPlace} onOpenDetails={onOpenDetails} />
+      <EditorialCards articles={articleCards} places={balancedPopularPlaces} />
+      <LandingFooter />
     </motion.section>
   );
 }
@@ -693,12 +924,595 @@ function UpcomingView({
 function NarrativeChapter({ eyebrow, title, copy }: { eyebrow: string; title: string; copy: string }) {
   return (
     <section className="pt-2">
-      <div className="inline-flex rounded-full border border-white/10 bg-white/8 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-neon/78 backdrop-blur-xl">
+      <div className="inline-flex rounded-full border border-white/28 bg-white/28 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-bone/82 shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] backdrop-blur-xl">
         {eyebrow}
       </div>
       <h1 className="mt-4 max-w-4xl font-display text-5xl font-black leading-[0.9] tracking-[-0.04em] text-balance md:text-7xl">{title}</h1>
-      <p className="mt-4 max-w-2xl text-base font-semibold leading-7 text-bone/62 md:text-lg">{copy}</p>
+      <p className="mt-4 max-w-2xl text-base font-semibold leading-7 text-bone/72 md:text-lg">{copy}</p>
     </section>
+  );
+}
+
+function RightNowHero({
+  events,
+  eventCount,
+  savedCount,
+  weather,
+  savedEvents,
+  onSaveEvent,
+  onOpenDetails,
+}: {
+  events: EventItem[];
+  eventCount: number;
+  savedCount: number;
+  weather: WeatherState | null;
+  savedEvents: string[];
+  onSaveEvent: (id: string) => void;
+  onOpenDetails: (event: EventItem) => void;
+}) {
+  const event = events[0];
+  const secondaryEvent = events[1];
+  const chips = [
+    { label: "Tonight", href: "/explore?date=Today" },
+    { label: "Live music", href: "/explore?vibe=Live+Music" },
+    { label: "Free", href: "/explore?vibe=Free" },
+    { label: "Date night", href: "/explore?vibe=Date+Night" }
+  ];
+  return (
+    <section className="landing-hero relative overflow-hidden rounded-[2rem] p-4 md:p-8">
+      <div className="pointer-events-none absolute inset-0 z-0 opacity-80 [background-image:radial-gradient(circle_at_12%_18%,rgba(255,255,255,0.62),transparent_16rem),radial-gradient(circle_at_82%_12%,rgba(48,209,88,0.32),transparent_18rem),linear-gradient(135deg,rgba(255,255,255,0.30),rgba(255,255,255,0.06))]" />
+      <div className="pointer-events-none absolute right-8 top-8 hidden h-24 w-24 rounded-[2rem] border border-white/20 bg-white/12 rotate-12 backdrop-blur md:block" />
+      <div className="relative z-10 grid gap-7 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)] lg:items-center">
+        <div className="py-2 md:py-7">
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            <LandingPillButton href="/explore?date=Nearby" icon={MapPin}>Austin, nearby</LandingPillButton>
+            <span className="inline-flex items-center gap-2 rounded-full bg-white/58 px-3 py-2 text-xs font-black text-ink shadow-soft backdrop-blur-xl">
+              <Heart className="h-4 w-4 text-neon" /> {savedCount} saved
+            </span>
+            <span className="inline-flex min-w-[118px] items-center gap-2 rounded-full bg-white/44 px-3 py-2 text-xs font-black text-ink/70 shadow-soft backdrop-blur-xl">
+              <CloudSun className="h-4 w-4 text-cactus" /> {weather ? `${weather.temperature}° ${weather.label}` : "Weather"}
+            </span>
+          </div>
+          <p className="inline-flex rounded-full bg-white/88 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-emerald-950 shadow-soft">Events, food, bars, and places</p>
+          <h1 className="mt-3 max-w-2xl font-display text-[3.35rem] font-black leading-[0.92] tracking-[-0.055em] text-emerald-950 md:text-[5.4rem]">
+            Find the move in Austin right now.
+          </h1>
+          <LandingSearchBox />
+          <div className="mt-4 flex flex-wrap gap-2">
+            {chips.map((chip) => (
+              <Link className="rounded-full border border-emerald-950/10 bg-white/88 px-3 py-2 text-xs font-black text-emerald-950 shadow-soft transition hover:-translate-y-0.5 hover:bg-white" href={chip.href} key={chip.label}>
+                {chip.label}
+              </Link>
+            ))}
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link className="inline-flex items-center gap-2 rounded-full bg-emerald-950 px-5 py-3 text-sm font-black text-white shadow-[0_18px_40px_rgba(6,47,34,0.28)] transition hover:-translate-y-0.5" href="/explore?date=Today">
+              See what&apos;s on tonight <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link className="inline-flex items-center gap-2 rounded-full border border-emerald-950/10 bg-white/52 px-5 py-3 text-sm font-black text-emerald-950 shadow-soft transition hover:-translate-y-0.5 hover:bg-white" href="/plan">
+              Build a plan
+            </Link>
+          </div>
+        </div>
+        <div className="relative min-h-[430px]">
+          {event ? (
+            <article className="glass-card glass-card-hover absolute left-0 top-6 w-[78%] rounded-[2rem] p-3 text-ink">
+              <div className="relative h-64 overflow-hidden rounded-[1.55rem]">
+                <SafeImage className="object-cover" src={event.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="420px" />
+                <FavoriteButton active={savedEvents.includes(event.id)} onClick={() => onSaveEvent(event.id)} className="absolute right-3 top-3" />
+              </div>
+              <button className="w-full p-3 text-left" onClick={() => onOpenDetails(event)}>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-cactus">{isTonight(event) ? "Tonight" : dayLabel(event)}</p>
+                <h3 className="mt-1 line-clamp-2 text-2xl font-black leading-tight">{event.title}</h3>
+                <p className="mt-3 flex items-center gap-2 text-xs font-bold text-ink/66">
+                  <CalendarDays className="h-4 w-4 text-cactus" /> {formatEventTime(event)} · {event.venueName}
+                </p>
+              </button>
+            </article>
+          ) : null}
+          {secondaryEvent ? (
+            <article className="glass-card glass-card-hover absolute bottom-8 right-0 w-[56%] rounded-[1.65rem] p-3 text-left text-ink">
+              <div className="relative h-32 overflow-hidden rounded-[1.25rem]">
+                <button className="absolute inset-0 z-10" onClick={() => onOpenDetails(secondaryEvent)} aria-label={`Open ${secondaryEvent.title}`} />
+                <SafeImage className="object-cover" src={secondaryEvent.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="260px" />
+                <FavoriteButton active={savedEvents.includes(secondaryEvent.id)} onClick={() => onSaveEvent(secondaryEvent.id)} className="absolute right-2 top-2 z-20" />
+              </div>
+              <button className="w-full text-left" onClick={() => onOpenDetails(secondaryEvent)}>
+                <p className="mt-3 text-xs font-black uppercase tracking-[0.14em] text-emerald-700">{isTonight(secondaryEvent) ? "Also tonight" : dayLabel(secondaryEvent)}</p>
+                <h3 className="mt-1 line-clamp-2 text-lg font-black leading-tight">{secondaryEvent.title}</h3>
+              </button>
+            </article>
+          ) : null}
+          <div className="absolute right-8 top-0 rounded-full bg-neon px-4 py-3 text-xs font-black text-emerald-950 shadow-[0_18px_40px_rgba(48,209,88,0.35)]">
+            {eventCount.toLocaleString("en-US")} events
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function LandingSearchBox() {
+  return (
+    <form className="mt-7 flex max-w-2xl items-center gap-2 rounded-full border border-emerald-950/8 bg-white/78 p-2 shadow-[0_18px_50px_rgba(9,17,13,0.12)] backdrop-blur-xl" action="/explore">
+      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-50 text-cactus">
+        <Search className="h-5 w-5" />
+      </div>
+      <input className="min-w-0 flex-1 bg-transparent text-sm font-bold text-emerald-950 outline-none placeholder:text-emerald-950/38" name="q" placeholder="Search live music, comedy, food, patios..." />
+      <button className="shrink-0 rounded-full bg-neon px-5 py-3 text-sm font-black text-emerald-950 shadow-[0_12px_30px_rgba(48,209,88,0.30)] transition hover:-translate-y-0.5" type="submit">
+        Search
+      </button>
+    </form>
+  );
+}
+
+function LandingPillButton({ href, icon: Icon, children }: { href: string; icon: typeof MapPin; children: React.ReactNode }) {
+  return (
+    <Link className="inline-flex items-center gap-2 rounded-full bg-white/58 px-3 py-2 text-xs font-black text-ink shadow-soft backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white" href={href}>
+      <Icon className="h-4 w-4 text-neon" />
+      {children}
+    </Link>
+  );
+}
+
+function TonightEventStrip({ events, savedEvents, onSaveEvent, onOpenDetails }: { events: EventItem[]; savedEvents: string[]; onSaveEvent: (id: string) => void; onOpenDetails: (event: EventItem) => void }) {
+  if (!events.length) return null;
+  return (
+    <section>
+      <LandingSectionHeader eyebrow="Right now" title="Tonight has a shape already." actionHref="/explore?date=Today" action="View tonight" centered />
+      <div>
+        <FullBleedRail>
+          {events.map((event) => (
+            <div className="w-[78vw] shrink-0 snap-start sm:w-[340px]" key={event.id}>
+              <EventPromoCard event={event} saved={savedEvents.includes(event.id)} onFavorite={onSaveEvent} onOpen={onOpenDetails} />
+            </div>
+          ))}
+        </FullBleedRail>
+        <div className="mt-4 flex justify-end"><CarouselArrowButton href="/explore?date=Today" /></div>
+      </div>
+    </section>
+  );
+}
+
+function PlanAroundThis({ event, places, savedPlaces, onSavePlace, onOpenPlace, onOpenDetails }: { event?: EventItem; places: UnifiedPlace[]; savedPlaces: string[]; onSavePlace: (id: string) => void; onOpenPlace: (place: UnifiedPlace) => void; onOpenDetails: (event: EventItem) => void }) {
+  if (!event && !places.length) return null;
+  return (
+    <section className="landing-card glass-card grid gap-5 rounded-[2rem] p-5 text-ink lg:grid-cols-[0.9fr_1.1fr] lg:p-6">
+      <div className="flex flex-col justify-between gap-5 rounded-[1.55rem] bg-emerald-950 p-5 text-white shadow-[0_18px_48px_rgba(9,17,13,0.22)]">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-neon">Plan around this</p>
+          <h2 className="mt-3 text-3xl font-black leading-[0.98] tracking-[-0.04em] md:text-5xl">{event ? event.title : "Start with the thing worth leaving for."}</h2>
+          <p className="mt-4 text-sm font-bold leading-6 text-white/74">{event ? `${formatEventTime(event)} at ${event.venueName}. Add an easy stop nearby so the night does not feel like logistics.` : "Pick the anchor first, then let food and drinks become the easy supporting cast."}</p>
+        </div>
+        {event ? (
+          <button className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-emerald-950 transition hover:-translate-y-0.5" onClick={() => onOpenDetails(event)}>
+            Open event <ArrowRight className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {places.slice(0, 3).map((place, index) => (
+          <MarketplaceCard key={place.id} place={place} saved={savedPlaces.includes(place.id)} rank={index + 1} onFavorite={onSavePlace} onOpen={onOpenPlace} compact />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NearbyContextStrip({ places, savedPlaces, onSavePlace, onOpenPlace }: { places: UnifiedPlace[]; savedPlaces: string[]; onSavePlace: (id: string) => void; onOpenPlace: (place: UnifiedPlace) => void }) {
+  if (!places.length) return null;
+  return (
+    <section>
+      <LandingSectionHeader eyebrow="Before, after, or nearby" title="Food, bars, rooms, and easy stops." actionHref="/places" action="View places" centered />
+      <div>
+        <FullBleedRail>
+          {places.map((place, index) => (
+            <div className="w-[74vw] shrink-0 snap-start sm:w-[280px]" key={place.id}>
+              <MarketplaceCard place={place} saved={savedPlaces.includes(place.id)} rank={index + 1} onFavorite={onSavePlace} onOpen={onOpenPlace} />
+            </div>
+          ))}
+        </FullBleedRail>
+        <div className="mt-4 flex justify-end"><CarouselArrowButton href="/places" /></div>
+      </div>
+    </section>
+  );
+}
+
+function BrandPillRail({ restaurantCount, eventCount, articleCount }: { restaurantCount: number; eventCount: number; articleCount: number }) {
+  const items = [
+    { label: "Cactus events", value: `${eventCount} listings`, icon: CalendarDays },
+    { label: "ATX Eats", value: `${restaurantCount} spots`, icon: Utensils },
+    { label: "Eater guides", value: `${articleCount} maps`, icon: BookOpen },
+    { label: "Local plans", value: "Saved + nearby", icon: Heart }
+  ];
+  return (
+    <section className="flex flex-wrap justify-center gap-3">
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <div className="inline-flex items-center gap-3 rounded-full border border-white/50 bg-white/62 px-4 py-3 text-ink shadow-soft backdrop-blur-xl" key={item.label}>
+            <Icon className="h-4 w-4 text-cactus" />
+            <span className="text-sm font-black">{item.label}</span>
+            <span className="text-xs font-bold text-ink/62">{item.value}</span>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function CategoryCarousel({ events, places }: { events: EventItem[]; places: UnifiedPlace[] }) {
+  const foodCount = places.filter((place) => place.kind === "restaurant").length;
+  const items = [
+    ...categoryLinks.map((category) => ({
+      label: category.label,
+      href: `/explore?${new URLSearchParams(category.vibe ? { vibe: category.vibe } : category.area ? { area: category.area } : {}).toString()}`,
+      icon: category.icon,
+      count: categoryEventCount(events, category)
+    })),
+    { label: "Restaurants", href: "/places", icon: Utensils, count: foodCount }
+  ];
+  return (
+    <section>
+      <LandingSectionHeader eyebrow="Categories" title="Browse the easiest lanes." actionHref="/explore" action="Explore all" centered />
+      <div className="full-bleed-rail-safe">
+        <div className="flex gap-3 overflow-x-auto px-1 py-3 hide-scrollbar">
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link className="category-tile group min-w-[136px] rounded-[1.5rem] p-4 text-center text-ink glass-card" href={item.href} key={item.label}>
+                <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-50 text-cactus transition duration-300 ease-out group-hover:bg-neon group-hover:text-emerald-950">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <p className="mt-3 text-sm font-black">{item.label}</p>
+                <p className="mt-1 text-[11px] font-black uppercase tracking-[0.12em] text-ink/62">{item.count.toLocaleString("en-US")}</p>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PopularGrid({
+  places,
+  events,
+  savedPlaces,
+  savedEvents,
+  onSavePlace,
+  onSaveEvent,
+  onOpenPlace,
+  onOpenDetails
+}: {
+  places: UnifiedPlace[];
+  events: EventItem[];
+  savedPlaces: string[];
+  savedEvents: string[];
+  onSavePlace: (id: string) => void;
+  onSaveEvent: (id: string) => void;
+  onOpenPlace: (place: UnifiedPlace) => void;
+  onOpenDetails: (event: EventItem) => void;
+}) {
+  return (
+    <section>
+      <LandingSectionHeader eyebrow="Popular" title="What Austin keeps choosing tonight." actionHref="/explore?vibe=Popular" action="View popular" />
+      {events.length ? (
+        <div className="grid gap-4 md:grid-cols-3">
+          {events.slice(0, 3).map((event) => (
+            <EventPromoCard key={event.id} event={event} saved={savedEvents.includes(event.id)} onFavorite={onSaveEvent} onOpen={onOpenDetails} />
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {places.slice(0, 4).map((place, index) => (
+          <MarketplaceCard key={place.id} place={place} saved={savedPlaces.includes(place.id)} rank={index + 1} onFavorite={onSavePlace} onOpen={onOpenPlace} compact />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function BeforeAfterSection({ places, savedPlaces, onSavePlace, onOpenPlace }: { places: UnifiedPlace[]; savedPlaces: string[]; onSavePlace: (id: string) => void; onOpenPlace: (place: UnifiedPlace) => void }) {
+  if (!places.length) return null;
+  return (
+    <section>
+      <LandingSectionHeader eyebrow="Before + after" title="Easy food moves around the main event." actionHref="/places" action="Browse food" />
+      <div className="grid gap-4 lg:grid-cols-2">
+        {places.slice(0, 4).map((place, index) => (
+          <article className="landing-card glass-card glass-card-hover grid gap-3 rounded-[1.75rem] p-3 text-ink md:grid-cols-[160px_1fr]" key={place.id}>
+            <button className="relative min-h-44 overflow-hidden rounded-[1.35rem]" onClick={() => onOpenPlace(place)}>
+              <SafeImage className="object-cover" src={place.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="180px" />
+              <span className="absolute left-3 top-3 rounded-full bg-neon px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-950">{index % 2 ? "After" : "Before"}</span>
+            </button>
+            <div className="flex flex-col justify-between gap-4 p-2">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-cactus">{index % 2 ? "Post-show stop" : "Pre-event bite"}</p>
+                <button className="mt-2 text-left text-2xl font-black leading-tight hover:text-cactus" onClick={() => onOpenPlace(place)}>{place.name}</button>
+                <p className="mt-2 text-sm font-semibold leading-6 text-ink/68">{place.price ? `${place.price} · ` : ""}{place.vibe}. {place.mustTry || "Save it for a quick plan."}</p>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <RatingMeta place={place} />
+                <FavoriteButton active={savedPlaces.includes(place.id)} onClick={() => onSavePlace(place.id)} />
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function GradientCtaBanner() {
+  return (
+    <section className="relative left-1/2 w-screen -translate-x-1/2 overflow-hidden rounded-none py-16 text-center text-white shadow-[0_24px_80px_rgba(9,17,13,0.22)] md:rounded-[2rem]">
+      <SafeImage className="object-cover" src="https://upload.wikimedia.org/wikipedia/commons/7/70/Austin-skyline-from-zilker-park.jpg" fallbackSrc={fallbackImage} alt="" fill sizes="100vw" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.20),rgba(0,0,0,0.72)),radial-gradient(circle_at_20%_18%,rgba(48,209,88,0.30),transparent_22rem)]" />
+      <div className="media-copy relative mx-auto max-w-4xl px-5">
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-white/82">One search, whole night</p>
+        <h2 className="mx-auto mt-3 max-w-2xl text-4xl font-black leading-[0.95] tracking-[-0.04em] md:text-6xl">Know what&apos;s worth leaving for.</h2>
+        <p className="mx-auto mt-4 max-w-xl text-sm font-bold leading-6 text-white/86">Cactus Club leads with the event, then folds in the food, bar, or patio that makes the night feel effortless.</p>
+        <Link className="mt-7 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-black text-emerald-950 shadow-[0_18px_40px_rgba(0,0,0,0.20)] transition hover:-translate-y-0.5" href="/explore">
+          Search Austin now <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function HowItWorks() {
+  const steps = [
+    { label: "Pick the spark", copy: "Start with tonight, a room, a show, comedy, or a neighborhood.", icon: Search },
+    { label: "Save the anchor", copy: "Heart events, venues, restaurants, or bars without managing a dashboard.", icon: Heart },
+    { label: "Add the stop", copy: "Layer in the bite, drink, or nearby place that makes the plan complete.", icon: Bike }
+  ];
+  return (
+    <section>
+      <LandingSectionHeader eyebrow="How it works" title="Three steps, no overthinking." centered />
+      <div className="grid gap-4 md:grid-cols-3">
+        {steps.map((step, index) => {
+          const Icon = step.icon;
+          return (
+            <article className="landing-card rounded-[1.75rem] bg-white/74 p-5 text-ink shadow-soft backdrop-blur-xl" key={step.label}>
+              <div className="flex items-center gap-3">
+                <span className="grid h-11 w-11 place-items-center rounded-full bg-emerald-50 text-cactus"><Icon className="h-5 w-5" /></span>
+                <span className="text-xs font-black uppercase tracking-[0.14em] text-ink/62">Step {index + 1}</span>
+              </div>
+              <h3 className="mt-5 text-2xl font-black tracking-[-0.03em]">{step.label}</h3>
+              <p className="mt-2 text-sm font-semibold leading-6 text-ink/68">{step.copy}</p>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function FeaturePanel({ places, event, onOpenPlace, onOpenDetails }: { places: UnifiedPlace[]; event?: EventItem; onOpenPlace: (place: UnifiedPlace) => void; onOpenDetails: (event: EventItem) => void }) {
+  const primary = places[0];
+  const secondary = places[1];
+  return (
+    <section className="landing-card glass-card grid gap-6 rounded-[2rem] p-5 text-ink lg:grid-cols-[0.86fr_1.14fr] lg:items-center lg:p-8">
+      <div>
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-cactus">Feature panel</p>
+        <h2 className="mt-3 text-4xl font-black leading-[0.98] tracking-[-0.045em] md:text-5xl">Plan around the thing worth leaving for.</h2>
+        <p className="mt-4 text-sm font-semibold leading-7 text-ink/68">Use events as the anchor, then let restaurants, bars, patios, and classics snap into place around the night.</p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link className="rounded-full bg-emerald-950 px-5 py-3 text-sm font-black text-white" href="/explore?date=Today">Browse tonight</Link>
+          <Link className="rounded-full border border-ink/10 px-5 py-3 text-sm font-black text-ink" href="/plan">Open saved plan</Link>
+        </div>
+      </div>
+      <div className="relative min-h-[420px]">
+        {primary ? (
+          <button className="glass-card-hover absolute left-0 top-0 h-[310px] w-[68%] overflow-hidden rounded-[1.75rem] shadow-[0_24px_70px_rgba(9,17,13,0.22)]" onClick={() => onOpenPlace(primary)}>
+            <SafeImage className="object-cover" src={primary.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="420px" />
+          </button>
+        ) : null}
+        {event ? (
+          <button className="absolute bottom-0 right-0 w-[58%] rounded-[1.65rem] bg-emerald-950 p-4 text-left text-white shadow-[0_24px_70px_rgba(9,17,13,0.24)]" onClick={() => onOpenDetails(event)}>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-neon">Tonight</p>
+            <h3 className="mt-2 line-clamp-3 text-2xl font-black leading-tight">{event.title}</h3>
+            <p className="mt-3 text-xs font-bold text-white/76">{formatEventTime(event)}</p>
+          </button>
+        ) : secondary ? (
+          <button className="absolute bottom-0 right-0 w-[58%] rounded-[1.65rem] bg-emerald-950 p-4 text-left text-white" onClick={() => onOpenPlace(secondary)}>{secondary.name}</button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function EditorialCards({ articles, places }: { articles: AtxArticle[]; places: UnifiedPlace[] }) {
+  if (!articles.length) return null;
+  return (
+    <section>
+      <LandingSectionHeader eyebrow="Austin guides" title="Keep a few ideas for later." actionHref="/explore" action="Read more" />
+      <div className="grid gap-4 md:grid-cols-3">
+        {articles.map((article, index) => {
+          const place = places[index % Math.max(places.length, 1)];
+          return (
+            <a className="landing-card glass-card glass-card-hover rounded-[1.65rem] p-3 text-ink" href={article.url} target="_blank" rel="noreferrer" key={article.slug}>
+              <div className="relative h-44 overflow-hidden rounded-[1.25rem]">
+                <SafeImage className="object-cover" src={place?.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="360px" />
+              </div>
+              <div className="p-4">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-cactus">{article.tags?.[0] ?? "Guide"}</p>
+                <h3 className="mt-2 line-clamp-2 text-xl font-black leading-tight">{article.title}</h3>
+                <p className="mt-3 text-sm font-semibold leading-6 text-ink/66">{article.place_count ?? "Local"} places to keep in your Austin rotation.</p>
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function LandingFooter() {
+  return (
+    <footer className="rounded-[2rem] bg-emerald-950 p-6 text-white shadow-[0_24px_80px_rgba(9,17,13,0.22)] md:p-8">
+      <div className="grid gap-8 md:grid-cols-[1.2fr_0.8fr_0.8fr]">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-sm font-black"><CalendarDays className="h-4 w-4 text-neon" /> Cactus Club</div>
+          <p className="mt-4 max-w-sm text-sm font-semibold leading-6 text-white/74">A friendly Austin marketplace for events, food, bars, rooms, patios, saved plans, and the next easy yes.</p>
+        </div>
+        <FooterLinks title="Quick links" links={[["Explore", "/explore"], ["Places", "/places"], ["Plan", "/plan"]]} />
+        <FooterLinks title="Support" links={[["Today", "/today"], ["Nearby", "/explore?date=Nearby"], ["Popular", "/explore?vibe=Popular"]]} />
+      </div>
+      <div className="mt-8 border-t border-white/10 pt-4 text-xs font-bold text-white/64">© 2026 Cactus Club. Built for local decisions.</div>
+    </footer>
+  );
+}
+
+function FooterLinks({ title, links }: { title: string; links: Array<[string, string]> }) {
+  return (
+    <div>
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-white/64">{title}</p>
+      <div className="mt-3 grid gap-2">
+        {links.map(([label, href]) => <Link className="text-sm font-bold text-white/70 transition hover:text-white" href={href} key={href}>{label}</Link>)}
+      </div>
+    </div>
+  );
+}
+
+function LandingSectionHeader({ eyebrow, title, actionHref, action, centered = false }: { eyebrow: string; title: string; actionHref?: string; action?: string; centered?: boolean }) {
+  return (
+    <div className={cn("mb-5 flex gap-4", centered ? "flex-col items-center text-center" : "items-end justify-between")}>
+      <div>
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-950/68">{eyebrow}</p>
+        <h2 className="mt-2 text-3xl font-black leading-none tracking-[-0.035em] text-emerald-950 md:text-5xl">{title}</h2>
+      </div>
+      {actionHref && action ? (
+        <Link className="shrink-0 rounded-full border border-emerald-950/12 bg-white/58 px-4 py-2 text-xs font-black text-emerald-950 shadow-soft transition hover:bg-white" href={actionHref}>
+          {action}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+function MarketplaceCard({ place, saved, onFavorite, onOpen, rank, compact = false }: { place: UnifiedPlace; saved: boolean; onFavorite: (id: string) => void; onOpen: (place: UnifiedPlace) => void; rank?: number; compact?: boolean }) {
+  return (
+    <article className="landing-card glass-card glass-card-hover rounded-[1.65rem] p-3 text-ink">
+      <div className={cn("relative overflow-hidden rounded-[1.25rem]", compact ? "h-44" : "h-52")}>
+        <button className="absolute inset-0 z-10" onClick={() => onOpen(place)} aria-label={`Open ${place.name}`} />
+        <SafeImage className="object-cover transition duration-700 hover:scale-105" src={place.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="320px" />
+        {rank ? <span className="absolute left-3 top-3 z-20 rounded-full bg-white/90 px-2.5 py-1.5 text-[10px] font-black text-ink shadow-soft">#{rank}</span> : null}
+        <FavoriteButton active={saved} onClick={() => onFavorite(place.id)} className="absolute right-3 top-3 z-20" />
+      </div>
+      <button className="w-full p-4 text-left" onClick={() => onOpen(place)}>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="line-clamp-2 text-lg font-black leading-tight">{place.name}</h3>
+          <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black uppercase text-cactus">{place.price ?? "$$"}</span>
+        </div>
+        <p className="mt-2 line-clamp-1 text-xs font-bold text-ink/66">{place.vibe}</p>
+        <RatingMeta place={place} />
+      </button>
+    </article>
+  );
+}
+
+function EventPromoCard({ event, saved, onFavorite, onOpen }: { event: EventItem; saved: boolean; onFavorite: (id: string) => void; onOpen: (event: EventItem) => void }) {
+  return (
+    <article className="landing-card glass-card glass-card-hover rounded-[1.65rem] p-3 text-ink">
+      <div className="relative h-48 overflow-hidden rounded-[1.25rem]">
+        <button className="absolute inset-0 z-10" onClick={() => onOpen(event)} aria-label={`Open ${event.title}`} />
+        <SafeImage className="object-cover" src={event.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="360px" />
+        <FavoriteButton active={saved} onClick={() => onFavorite(event.id)} className="absolute right-3 top-3 z-20" />
+      </div>
+      <button className="w-full p-4 text-left" onClick={() => onOpen(event)}>
+        <p className="text-xs font-black uppercase tracking-[0.14em] text-cactus">{dayLabel(event)}</p>
+        <h3 className="mt-2 line-clamp-2 text-lg font-black leading-tight">{event.title}</h3>
+        <div className="mt-3 flex items-center gap-2 text-xs font-bold text-ink/66"><CalendarDays className="h-4 w-4 text-cactus" /> {formatEventTime(event)}</div>
+      </button>
+    </article>
+  );
+}
+
+function FavoriteButton({ active, onClick, className }: { active: boolean; onClick: () => void; className?: string }) {
+  return (
+    <button className={cn("grid h-10 w-10 place-items-center rounded-full bg-white/88 text-ink shadow-soft backdrop-blur transition hover:scale-105", active && "bg-neon text-emerald-950", className)} onClick={(event) => { event.stopPropagation(); onClick(); }} aria-label={active ? "Remove favorite" : "Add favorite"}>
+      <Heart className={cn("h-5 w-5", active && "fill-current")} />
+    </button>
+  );
+}
+
+function RatingMeta({ place }: { place: UnifiedPlace }) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold text-ink/66">
+      <span className="inline-flex items-center gap-1 text-ink/70"><Star className="h-4 w-4 fill-[#f5a83c] text-[#f5a83c]" /> {ratingForPlace(place)}</span>
+      <span>•</span>
+      <span>{formatDistance(place.distanceMiles) ?? prepTimeForPlace(place)}</span>
+      <span>•</span>
+      <span>{place.area === "Burbs" ? "Suburbs" : place.area}</span>
+    </div>
+  );
+}
+
+function CarouselArrowButton({ href }: { href: string }) {
+  return (
+    <Link className="hidden h-12 w-12 place-items-center rounded-full bg-white/72 text-ink shadow-[0_18px_44px_rgba(9,17,13,0.18)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white md:grid" href={href} aria-label="View more">
+      <ArrowRight className="h-5 w-5" />
+    </Link>
+  );
+}
+
+function ratingForPlace(place: UnifiedPlace) {
+  return (4.4 + Math.min(0.5, place.popularityScore / 240)).toFixed(1);
+}
+
+function prepTimeForPlace(place: UnifiedPlace) {
+  if (place.kind === "bar") return "20-35 min";
+  if (place.price === "$") return "15-25 min";
+  return "25-45 min";
+}
+
+function HomeCommandPanel({
+  savedCount,
+  visitedCount,
+  foodCount,
+  eventCount,
+  weather
+}: {
+  savedCount: number;
+  visitedCount: number;
+  foodCount: number;
+  eventCount: number;
+  weather: WeatherState | null;
+}) {
+  return (
+    <section className="glass-panel relative overflow-hidden rounded-[1.65rem] p-5 md:p-8">
+      <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-neon/18 blur-3xl" />
+      <div className="relative grid gap-7 lg:grid-cols-[1fr_360px] lg:items-end">
+        <div>
+          <p className="inline-flex rounded-full border border-white/28 bg-white/24 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-bone/82 shadow-[inset_0_1px_0_rgba(255,255,255,0.38)] backdrop-blur-xl">
+            {timeGreeting()}
+          </p>
+          <h1 className="mt-5 max-w-3xl font-display text-5xl font-black leading-[0.94] tracking-[-0.04em] text-balance md:text-7xl">
+            Your Austin list, live.
+          </h1>
+          <p className="mt-4 max-w-2xl text-base font-semibold leading-7 text-bone/68 md:text-lg">
+            Restaurants, events, saved places, and tonight’s easy moves are now in one calm workspace.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <MetricTile label="Food spots" value={foodCount.toLocaleString("en-US")} />
+          <MetricTile label="Upcoming" value={eventCount.toLocaleString("en-US")} />
+          <MetricTile label="Saved" value={savedCount.toLocaleString("en-US")} />
+          <MetricTile label={weather ? weather.label : "Weather"} value={weather ? `${weather.temperature}°` : "Ready"} />
+          {visitedCount ? <div className="col-span-2"><MetricTile label="Visited" value={visitedCount.toLocaleString("en-US")} /></div> : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MetricTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[1.15rem] border border-white/18 bg-white/14 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.30)] backdrop-blur-xl">
+      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-bone/44">{label}</p>
+      <p className="mt-2 text-2xl font-black leading-none tracking-[-0.03em]">{value}</p>
+    </div>
   );
 }
 
@@ -713,7 +1527,7 @@ function NarrativeSkeleton() {
 function FullBleedRail({ children }: { children: React.ReactNode }) {
   return (
     <div className="container-bleed-rail relative overflow-visible">
-      <div className="flex snap-x gap-3 overflow-x-auto pb-1 hide-scrollbar">
+      <div className="flex snap-x gap-3 overflow-x-auto px-1 py-3 hide-scrollbar">
         {children}
       </div>
     </div>
@@ -733,7 +1547,7 @@ function CategoryJumpGrid({ events }: { events: EventItem[] }) {
           if (category.area) params.set("area", category.area);
           return (
             <Link
-              className="glass-panel group flex min-h-[132px] flex-col items-center justify-center rounded-[1.35rem] p-4 text-center transition duration-300 hover:-translate-y-0.5 hover:border-neon/35 hover:bg-white/12"
+              className="glass-panel group flex min-h-[132px] flex-col items-center justify-center rounded-[1.35rem] p-4 text-center transition duration-300 hover:-translate-y-0.5 hover:border-white/60 hover:bg-white/36"
               href={`/explore?${params.toString()}`}
               key={category.label}
             >
@@ -911,7 +1725,7 @@ function WeatherPlanSection({ weather, events, savedEvents, onSave, onOpenDetail
         <div className="min-w-0">
           <div className="mb-3 flex items-end justify-between gap-3">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-mezcal">Weather picks</p>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Weather picks</p>
               <h3 className="mt-1 text-2xl font-black">{patio ? "Patios, parks, easy yeses." : "Rooms worth hiding in."}</h3>
             </div>
           </div>
@@ -924,6 +1738,134 @@ function WeatherPlanSection({ weather, events, savedEvents, onSave, onOpenDetail
           </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+function AppleNativeBrief() {
+  return (
+    <section className="grid gap-3 md:grid-cols-3">
+      {[
+        { label: "Today is the command center", copy: "Food, events, weather, and saved intent appear only when they help the next decision.", icon: Sparkles },
+        { label: "Plans are spatial", copy: "Save an anchor, add nearby stops, and keep advanced group tools behind the plan surface.", icon: ListPlus },
+        { label: "Austin stays calm", copy: "Curated rows, soft panels, and contextual actions keep the app powerful without dashboard overload.", icon: Compass }
+      ].map((item) => {
+        const Icon = item.icon;
+        return (
+          <article className="glass-panel rounded-[1.35rem] p-4" key={item.label}>
+            <div className="grid h-10 w-10 place-items-center rounded-full bg-white/18 text-emerald-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.34)]">
+              <Icon className="h-5 w-5" />
+            </div>
+            <h3 className="mt-4 text-lg font-black leading-tight">{item.label}</h3>
+            <p className="mt-2 text-sm font-semibold leading-6 text-bone/58">{item.copy}</p>
+          </article>
+        );
+      })}
+    </section>
+  );
+}
+
+function OutingRail({
+  recommendations,
+  savedEvents,
+  savedPlaces,
+  onSaveEvent,
+  onSavePlace,
+  onOpenDetails,
+  onOpenPlace
+}: {
+  recommendations: OutingRecommendation[];
+  savedEvents: string[];
+  savedPlaces: string[];
+  onSaveEvent: (id: string) => void;
+  onSavePlace: (id: string) => void;
+  onOpenDetails: (event: EventItem) => void;
+  onOpenPlace: (place: UnifiedPlace) => void;
+}) {
+  if (!recommendations.length) return null;
+  return (
+    <section>
+      <SectionHeader kicker="Complete moves" title="Anchor + add-ons." />
+      <FullBleedRail>
+        {recommendations.map((recommendation) => {
+          const anchor = recommendation.anchor;
+          const eventAnchor = "title" in anchor ? anchor : null;
+          const placeAnchor = "name" in anchor && !("title" in anchor) ? anchor : null;
+          return (
+            <article className="glass-panel flex min-h-[360px] w-[82vw] shrink-0 snap-start flex-col justify-between rounded-[1.65rem] p-4 sm:w-[420px]" key={recommendation.id}>
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Austin move</p>
+                <button className="mt-2 text-left text-3xl font-black leading-none tracking-[-0.03em] underline-offset-4 transition hover:text-neon hover:underline" onClick={() => eventAnchor ? onOpenDetails(eventAnchor) : placeAnchor ? onOpenPlace(placeAnchor) : undefined}>
+                  {eventAnchor ? eventAnchor.title : placeAnchor?.name}
+                </button>
+                <p className="mt-3 text-sm font-semibold leading-6 text-bone/62">{recommendation.reason}</p>
+              </div>
+              <div className="mt-5 space-y-3">
+                {recommendation.addOns.map((place) => (
+                  <button className="flex w-full items-center justify-between gap-3 rounded-[1.1rem] bg-white/14 p-3 text-left transition hover:bg-white/24" key={place.id} onClick={() => onOpenPlace(place)}>
+                    <span>
+                      <span className="block text-sm font-black">{place.name}</span>
+                      <span className="mt-1 block text-xs font-bold text-bone/50">{place.price ? `${place.price} · ` : ""}{place.vibe}</span>
+                    </span>
+                    <Utensils className="h-4 w-4 shrink-0 text-emerald-100" />
+                  </button>
+                ))}
+              </div>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {eventAnchor ? (
+                  <button className={cn("rounded-full px-4 py-2 text-xs font-black transition", savedEvents.includes(eventAnchor.id) ? "bg-neon text-emerald-950" : "bg-white/18 text-bone hover:bg-white/28")} onClick={() => onSaveEvent(eventAnchor.id)}>
+                    {savedEvents.includes(eventAnchor.id) ? "Saved anchor" : "Save anchor"}
+                  </button>
+                ) : null}
+                {recommendation.addOns[0] ? (
+                  <button className={cn("rounded-full px-4 py-2 text-xs font-black transition", savedPlaces.includes(recommendation.addOns[0].id) ? "bg-neon text-emerald-950" : "bg-white/18 text-bone hover:bg-white/28")} onClick={() => onSavePlace(recommendation.addOns[0].id)}>
+                    {savedPlaces.includes(recommendation.addOns[0].id) ? "Food saved" : "Save food"}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
+      </FullBleedRail>
+    </section>
+  );
+}
+
+function PlaceRail({
+  title,
+  kicker,
+  places,
+  savedPlaces,
+  visitedPlaces,
+  onSavePlace,
+  onOpenPlace
+}: {
+  title: string;
+  kicker: string;
+  places: UnifiedPlace[];
+  savedPlaces: string[];
+  visitedPlaces: string[];
+  onSavePlace: (id: string) => void;
+  onOpenPlace: (place: UnifiedPlace) => void;
+}) {
+  if (!places.length) return null;
+  return (
+    <section>
+      <SectionHeader kicker={kicker} title={title} />
+      <FullBleedRail>
+        {places.map((place) => (
+          <div className="w-[76vw] shrink-0 snap-start sm:w-[320px]" key={place.id}>
+            <UnifiedPlaceCard
+              place={place}
+              saved={savedPlaces.includes(place.id)}
+              visited={visitedPlaces.includes(place.id)}
+              onSave={onSavePlace}
+              onVisit={(_id) => undefined}
+              onOpen={onOpenPlace}
+            />
+          </div>
+        ))}
+      </FullBleedRail>
     </section>
   );
 }
@@ -944,14 +1886,14 @@ function weatherVisual(weather: WeatherState | null, night: boolean, patio: bool
       imageAlt: "Rain streaks on glass at night",
       imageClass: "opacity-62 saturate-125",
       imageOverlayClass: "bg-[linear-gradient(145deg,rgba(8,12,20,0.88)_0%,rgba(16,24,39,0.70)_42%,rgba(38,50,65,0.82)_100%)]",
-      panelClass: "border-sky-200/12 bg-[radial-gradient(circle_at_18%_10%,rgba(125,211,252,0.24),transparent_14rem),linear-gradient(145deg,#101827_0%,#172033_46%,#263241_100%)] text-bone",
-      skyGlowClass: "bg-sky-200/18",
+      panelClass: "border-emerald-200/12 bg-[radial-gradient(circle_at_18%_10%,rgba(125,211,252,0.24),transparent_14rem),linear-gradient(145deg,#101827_0%,#172033_46%,#263241_100%)] text-bone",
+      skyGlowClass: "bg-emerald-200/18",
       groundGlowClass: "bg-violet/18",
-      orbClass: "absolute right-8 top-8 h-16 w-16 rounded-full bg-sky-100/18 blur-sm",
-      iconClass: "bg-sky-100/14 text-sky-100 ring-1 ring-sky-100/20",
+      orbClass: "absolute right-8 top-8 h-16 w-16 rounded-full bg-emerald-100/18 blur-sm",
+      iconClass: "bg-emerald-100/14 text-emerald-100 ring-1 ring-emerald-100/20",
       textClass: "text-bone",
       mutedClass: "text-bone/62",
-      eyebrowClass: "text-sky-100/64"
+      eyebrowClass: "text-emerald-100/64"
     };
   }
 
@@ -992,8 +1934,8 @@ function weatherVisual(weather: WeatherState | null, night: boolean, patio: bool
       orbClass: "absolute right-8 top-8 h-16 w-16 rounded-full bg-white/48 blur-md",
       iconClass: "bg-ink text-bone",
       textClass: "text-ink",
-      mutedClass: "text-ink/58",
-      eyebrowClass: "text-ink/52"
+      mutedClass: "text-ink/68",
+      eyebrowClass: "text-ink/66"
     };
   }
 
@@ -1012,8 +1954,8 @@ function weatherVisual(weather: WeatherState | null, night: boolean, patio: bool
     orbClass: "absolute right-8 top-8 h-16 w-16 rounded-full bg-[#ffe680] shadow-[0_0_48px_rgba(255,230,128,0.72)]",
     iconClass: "bg-ink text-bone",
     textClass: "text-ink",
-    mutedClass: "text-ink/58",
-    eyebrowClass: "text-ink/54"
+    mutedClass: "text-ink/68",
+    eyebrowClass: "text-ink/66"
   };
 }
 
@@ -1025,8 +1967,8 @@ function isNightTime(date = new Date()) {
 function WeatherMetric({ icon: Icon, label, value, dark = false }: { icon: typeof CloudSun; label: string; value: string; dark?: boolean }) {
   return (
     <div className={cn("rounded-2xl p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] backdrop-blur", dark ? "border border-white/12 bg-white/10" : "border border-ink/8 bg-white/34")}>
-      <Icon className={cn("h-4 w-4", dark ? "text-bone/68" : "text-ink/58")} />
-      <p className={cn("mt-3 text-[10px] font-black uppercase tracking-[0.16em]", dark ? "text-bone/48" : "text-ink/45")}>{label}</p>
+      <Icon className={cn("h-4 w-4", dark ? "text-bone/68" : "text-ink/68")} />
+      <p className={cn("mt-3 text-[10px] font-black uppercase tracking-[0.16em]", dark ? "text-bone/68" : "text-ink/66")}>{label}</p>
       <p className={cn("mt-1 text-sm font-black leading-tight", dark ? "text-bone" : "text-ink")}>{value}</p>
     </div>
   );
@@ -1087,7 +2029,7 @@ function EvergreenDiscovery({ evergreenEvents, venues, savedVenues, onSaveVenue 
   return (
     <section className="glass-panel grid gap-4 overflow-hidden rounded-[1.75rem] p-4 lg:grid-cols-[0.8fr_1.2fr] lg:p-5">
       <div className="flex flex-col justify-center p-1">
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-mezcal">Always on</p>
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-100">Always on</p>
         <h2 className="mt-2 font-display text-4xl leading-none md:text-5xl">Need an idea?</h2>
         <p className="mt-3 max-w-sm text-sm font-semibold leading-6 text-bone/62">Evergreen Austin moves for when events are too much and staying home is not it.</p>
       </div>
@@ -1100,19 +2042,19 @@ function EvergreenDiscovery({ evergreenEvents, venues, savedVenues, onSaveVenue 
             <RefreshCcw className="h-5 w-5" />
           </button>
         </div>
-        <div className="absolute inset-x-0 bottom-0 p-5">
+        <div className="media-copy absolute inset-x-0 bottom-0 p-5">
           <p className="text-xs font-black uppercase tracking-[0.18em] text-neon">{item.venue.neighborhoodPersonality}</p>
           <h3 className="mt-2 max-w-2xl text-4xl font-black leading-none md:text-5xl">{item.idea.title}</h3>
           <p className="mt-3 text-sm font-bold text-bone/70">{item.venue.name} · {areaLabel(item.venue.area)}</p>
           <div className="mt-5 flex flex-wrap gap-2">
-            <button className={cn("rounded-full px-4 py-2 text-xs font-black transition", saved ? "bg-neon text-ink" : "bg-white/12 text-bone hover:bg-white/18")} onClick={() => onSaveVenue(item.venue.id)}>
+            <button className={cn("rounded-full px-4 py-2 text-xs font-black transition", saved ? "bg-neon text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)]" : "bg-white/18 text-bone hover:bg-white/28")} onClick={() => onSaveVenue(item.venue.id)}>
               {saved ? "Saved" : "Save place"}
             </button>
-            <Link className="rounded-full bg-bone px-4 py-2 text-xs font-black text-ink transition hover:bg-neon" href={`/places/${item.venue.id}`}>
+            <Link className="rounded-full bg-neon px-4 py-2 text-xs font-black text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)] transition hover:bg-[#35E56B]" href={`/places/${item.venue.id}`}>
               Venue page
             </Link>
             {item.venue.venueUrl ? (
-              <a className="rounded-full bg-white/12 px-4 py-2 text-xs font-black text-bone transition hover:bg-white/18" href={item.venue.venueUrl} target="_blank" rel="noreferrer">
+              <a className="rounded-full bg-white/18 px-4 py-2 text-xs font-black text-bone transition hover:bg-white/28" href={item.venue.venueUrl} target="_blank" rel="noreferrer">
                 Visit
               </a>
             ) : null}
@@ -1127,10 +2069,10 @@ function MoveMaker({ events, savedEvents, onSave, onOpenDetails }: { events: Eve
   const [intent, setIntent] = useState<MoveIntent>({ vibe: "Actually Worth It", energy: "medium", company: "friends" });
   const picks = useMemo(() => chooseForMove(events, intent), [events, intent]);
   return (
-    <section className="max-w-full overflow-hidden rounded-[1.75rem] border border-white/30 bg-bone p-4 text-ink shadow-[0_24px_90px_rgba(248,240,223,0.14)] md:rounded-[2rem] md:p-8">
+    <section className="max-w-full overflow-hidden rounded-[1.75rem] border border-white/54 bg-white/82 p-4 text-ink shadow-[0_24px_90px_rgba(0,0,0,0.16)] backdrop-blur-2xl md:rounded-[2rem] md:p-8">
       <div className="grid min-w-0 max-w-full gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-mezcal">Signature move</p>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-neon">Signature move</p>
           <h2 className="mt-3 max-w-full font-display text-4xl leading-none md:text-6xl">What’s the move?</h2>
           <p className="mt-4 max-w-md text-sm font-medium leading-6 text-ink/62">
             Tell Cactus Club the mood. Get three easy picks without scrolling yourself into staying home.
@@ -1160,7 +2102,7 @@ function ChipGroup<T extends string>({ label, values, value, onChange }: { label
           <button
             className={cn(
               "max-w-[78vw] shrink-0 whitespace-nowrap rounded-full border px-3 py-2 text-xs font-black transition",
-              value === item ? "border-ink bg-ink text-bone" : "border-ink/15 bg-ink/5 text-ink/72 hover:bg-ink/10"
+              value === item ? "border-neon bg-neon text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.22)]" : "border-ink/10 bg-white/72 text-ink/72 hover:bg-white"
             )}
             key={item}
             onClick={() => onChange(item)}
@@ -1173,23 +2115,360 @@ function ChipGroup<T extends string>({ label, values, value, onChange }: { label
   );
 }
 
+type ExploreGuideCard = {
+  id: string;
+  label: string;
+  title: string;
+  copy: string;
+  anchor: EventItem;
+  nearbyEvents: EventItem[];
+  addOns: UnifiedPlace[];
+  tone: "lime" | "orange" | "blue";
+};
+
+function ExploreGuidesFrontPage({
+  articles,
+  events,
+  places,
+  calendarMonth,
+  dateMode,
+  endDate,
+  locationEnabled,
+  onMonthChange,
+  onPickDate,
+  onQuickPick,
+  startDate,
+  onOpenDetails,
+  onOpenPlace
+}: {
+  articles: AtxArticle[];
+  events: EventItem[];
+  places: UnifiedPlace[];
+  calendarMonth: Date;
+  dateMode: "Any" | "Today" | "Tomorrow" | "Weekend" | "Range" | "Nearby";
+  endDate: string;
+  locationEnabled: boolean;
+  onMonthChange: (date: Date) => void;
+  onPickDate: (value: string) => void;
+  onQuickPick: (mode: "Any" | "Today" | "Tomorrow" | "Weekend" | "Range" | "Nearby") => void;
+  startDate: string;
+  onOpenDetails: (event: EventItem) => void;
+  onOpenPlace: (place: UnifiedPlace) => void;
+}) {
+  const allocation = useMemo(() => allocateExploreEvents(events, places), [events, places]);
+  const localArticles = useMemo(() => curateLocalArticles(articles).slice(0, 4), [articles]);
+  const guideCards = allocation.guideCards;
+  const heroGuide = guideCards[0];
+  const supportingGuides = guideCards.slice(1, 6);
+  const sidebarPick = allocation.sidebarPlace ?? heroGuide?.addOns[0] ?? places[0];
+
+  if (!heroGuide && !places.length) return null;
+
+  return (
+    <section className="space-y-6 pt-1">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-100">Explore guides</p>
+          <h1 className="mt-2 max-w-3xl font-display text-4xl font-black leading-[0.95] tracking-[-0.04em] md:text-6xl">Build the night around what is actually happening.</h1>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {["Tonight", "Live Music", "Free", "Date Night"].map((label) => (
+            <Link className="rounded-full border border-white/26 bg-white/18 px-3 py-2 text-xs font-black text-bone/76 backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white/28 hover:text-bone" href={label === "Tonight" ? "/explore?date=Today" : `/explore?vibe=${encodeURIComponent(label)}`} key={label}>
+              {label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-5">
+          {heroGuide ? <ExploreGuideHeroCard guide={heroGuide} onOpenDetails={onOpenDetails} onOpenPlace={onOpenPlace} /> : null}
+
+          <section className="grid min-w-0 gap-4 md:grid-cols-2">
+            {supportingGuides.map((guide) => (
+              <ExploreGuideCardView guide={guide} key={guide.id} onOpenDetails={onOpenDetails} onOpenPlace={onOpenPlace} />
+            ))}
+          </section>
+
+          {localArticles.length ? (
+            <section className="glass-card rounded-[1.75rem] p-4 text-ink">
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-cactus">Austin local guides</p>
+                  <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.035em] md:text-3xl">Keep these local rotations handy.</h2>
+                </div>
+                <Link className="rounded-full border border-emerald-950/10 bg-white/58 px-4 py-2 text-xs font-black text-emerald-950 shadow-soft transition hover:bg-white" href="/places">
+                  Browse places
+                </Link>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {localArticles.map((article, index) => (
+                  <LocalGuideArticleCard article={article} place={places[index % Math.max(places.length, 1)]} key={article.slug} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="grid gap-4 lg:grid-cols-2">
+            <CompactStoryList title="Soonest calendar" items={allocation.soonestCalendar.map((event) => ({ id: event.id, title: event.title, meta: `${dayLabel(event)} · ${formatEventTime(event)}`, imageUrl: event.imageUrl, onClick: () => onOpenDetails(event) }))} />
+            <CompactStoryList title="Most browsed" items={allocation.mostBrowsed.map((event) => ({ id: event.id, title: event.title, meta: `${event.category} · ${areaLabel(event.area)}`, imageUrl: event.imageUrl, onClick: () => onOpenDetails(event) }))} />
+          </section>
+        </div>
+
+        <aside className="min-w-0 space-y-4 xl:sticky xl:top-24 xl:self-start">
+          <EventCalendarWidget
+            calendarMonth={calendarMonth}
+            dateMode={dateMode}
+            endDate={endDate}
+            locationEnabled={locationEnabled}
+            onMonthChange={onMonthChange}
+            onPickDate={onPickDate}
+            onQuickPick={onQuickPick}
+            startDate={startDate}
+          />
+          {allocation.sidebarPromo ? (
+            <SidebarFeatureCard
+              imageUrl={allocation.sidebarPromo.imageUrl}
+              label="Tonight pick"
+              title={allocation.sidebarPromo.title}
+              meta={`${formatEventTime(allocation.sidebarPromo)} · ${allocation.sidebarPromo.venueName}`}
+              onClick={() => onOpenDetails(allocation.sidebarPromo)}
+            />
+          ) : null}
+          {sidebarPick ? (
+            <SidebarFeatureCard
+              imageUrl={sidebarPick.imageUrl}
+              label="Nearby stop"
+              title={sidebarPick.name}
+              meta={`${placeKindLabel(sidebarPick.kind)} · ${areaLabel(sidebarPick.area)}`}
+              onClick={() => onOpenPlace(sidebarPick)}
+            />
+          ) : null}
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function ExploreGuideHeroCard({ guide, onOpenDetails, onOpenPlace }: { guide: ExploreGuideCard; onOpenDetails: (event: EventItem) => void; onOpenPlace: (place: UnifiedPlace) => void }) {
+  return (
+    <article className="glass-card glass-card-hover grid min-w-0 gap-4 rounded-[2rem] p-3 text-ink lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
+      <button className="group relative min-h-[430px] overflow-hidden rounded-[1.65rem] text-left" onClick={() => onOpenDetails(guide.anchor)}>
+        <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={guide.anchor.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 1024px) 94vw, 700px" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.18)_34%,rgba(0,0,0,0.86)_100%)]" />
+        <div className="media-copy absolute inset-x-0 bottom-0 p-5 md:p-7">
+          <StoryLabel tone={guide.tone}>{guide.label}</StoryLabel>
+          <h2 className="mt-4 max-w-2xl text-4xl font-black leading-[0.94] tracking-[-0.045em] text-white md:text-6xl">{guide.title}</h2>
+          <StoryMetadataRow primary={`${dayLabel(guide.anchor)} · ${formatEventTime(guide.anchor)}`} secondary={guide.anchor.venueName} />
+        </div>
+      </button>
+      <div className="flex min-w-0 flex-col justify-between gap-4 p-2 lg:p-4">
+        <div>
+          <p className="text-sm font-bold leading-6 text-ink/68">{guide.copy}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {guide.nearbyEvents.map((event) => (
+              <button className="rounded-full bg-emerald-950 px-3 py-2 text-xs font-black text-white shadow-soft transition hover:-translate-y-0.5" key={event.id} onClick={() => onOpenDetails(event)}>
+                {formatEventTime(event)} · {event.venueName}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-3">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-cactus">Add a stop nearby</p>
+          {guide.addOns.slice(0, 2).map((place) => (
+            <button className="grid grid-cols-[82px_1fr] gap-3 rounded-[1.15rem] bg-white/36 p-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] transition hover:-translate-y-0.5 hover:bg-white/50" key={place.id} onClick={() => onOpenPlace(place)}>
+              <span className="relative h-20 overflow-hidden rounded-[0.95rem]">
+                <SafeImage className="object-cover" src={place.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="100px" />
+              </span>
+              <span className="min-w-0 py-1">
+                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-cactus">{placeKindLabel(place.kind)}</span>
+                <span className="mt-1 line-clamp-2 block text-base font-black leading-tight">{place.name}</span>
+                <span className="mt-2 block text-xs font-bold text-ink/58">{place.price ?? "$$"} · {areaLabel(place.area)}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ExploreGuideCardView({ guide, onOpenDetails, onOpenPlace }: { guide: ExploreGuideCard; onOpenDetails: (event: EventItem) => void; onOpenPlace: (place: UnifiedPlace) => void }) {
+  return (
+    <article className="glass-card glass-card-hover rounded-[1.75rem] p-3 text-ink">
+      <button className="group relative h-56 w-full overflow-hidden rounded-[1.35rem] text-left" onClick={() => onOpenDetails(guide.anchor)}>
+        <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={guide.anchor.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="420px" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/84 via-black/24 to-transparent" />
+        <div className="media-copy absolute inset-x-0 bottom-0 p-4">
+          <StoryLabel tone={guide.tone}>{guide.label}</StoryLabel>
+          <h3 className="mt-3 line-clamp-2 text-2xl font-black leading-tight text-white">{guide.title}</h3>
+        </div>
+      </button>
+      <div className="p-3">
+        <p className="line-clamp-2 text-sm font-semibold leading-6 text-ink/66">{guide.copy}</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button className="rounded-full bg-emerald-950 px-3 py-2 text-xs font-black text-white transition hover:-translate-y-0.5" onClick={() => onOpenDetails(guide.anchor)}>
+            {formatEventTime(guide.anchor)}
+          </button>
+          {guide.addOns.slice(0, 2).map((place) => (
+            <button className="rounded-full bg-white/54 px-3 py-2 text-xs font-black text-emerald-950 shadow-soft transition hover:-translate-y-0.5 hover:bg-white" key={place.id} onClick={() => onOpenPlace(place)}>
+              {place.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function LocalGuideArticleCard({ article, place }: { article: AtxArticle; place?: UnifiedPlace }) {
+  return (
+    <a className="glass-card-hover rounded-[1.35rem] bg-white/28 p-2 text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.36)]" href={article.url} target="_blank" rel="noreferrer">
+      <div className="relative h-32 overflow-hidden rounded-[1rem]">
+        <SafeImage className="object-cover transition duration-700 hover:scale-105" src={place?.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="220px" />
+        <div className="absolute left-2 top-2"><StoryLabel tone="lime">{article.tags?.[0] ?? "Guide"}</StoryLabel></div>
+      </div>
+      <div className="p-2">
+        <h3 className="line-clamp-2 text-sm font-black leading-tight">{article.title}</h3>
+        <p className="mt-2 text-xs font-bold text-ink/58">{article.place_count ?? "Local"} places · Local rotation</p>
+      </div>
+    </a>
+  );
+}
+
+function SidebarFeatureCard({ imageUrl, label, title, meta, onClick }: { imageUrl?: string; label: string; title: string; meta: string; onClick: () => void }) {
+  return (
+    <button className="glass-card-hover relative min-h-[210px] w-full overflow-hidden rounded-[1.45rem] text-left shadow-card" onClick={onClick}>
+      <SafeImage className="object-cover transition duration-700 hover:scale-105" src={imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="340px" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/30 to-transparent" />
+      <div className="media-copy absolute inset-x-0 bottom-0 p-4">
+        <StoryLabel tone="lime">{label}</StoryLabel>
+        <h3 className="mt-2 line-clamp-2 text-xl font-black text-white">{title}</h3>
+        <p className="mt-2 text-xs font-bold text-white/76">{meta}</p>
+      </div>
+    </button>
+  );
+}
+
+function CompactStoryList({ title, items, compact = false }: { title: string; compact?: boolean; items: Array<{ id: string; title: string; meta: string; imageUrl?: string; onClick: () => void }> }) {
+  if (!items.length) return null;
+  return (
+    <section className={cn("glass-card rounded-[1.45rem] p-4 text-ink", compact && "bg-emerald-950/70 text-bone")}>
+      <h3 className={cn("text-xs font-black uppercase tracking-[0.18em]", compact ? "text-emerald-100" : "text-cactus")}>{title}</h3>
+      <div className="mt-3 grid gap-2">
+        {items.map((item) => (
+          <button className={cn("grid grid-cols-[58px_1fr] gap-3 rounded-[1rem] p-2 text-left transition hover:-translate-y-0.5", compact ? "hover:bg-white/12" : "bg-white/24 hover:bg-white/42")} key={item.id} onClick={item.onClick}>
+            <span className="relative h-14 overflow-hidden rounded-xl bg-white/12">
+              <SafeImage className="object-cover" src={item.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="80px" />
+            </span>
+            <span className="min-w-0">
+              <span className={cn("line-clamp-2 text-sm font-black leading-tight", compact ? "text-bone" : "text-ink")}>{item.title}</span>
+              <span className={cn("mt-1 block truncate text-xs font-bold", compact ? "text-bone/48" : "text-ink/52")}>{item.meta}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EventCalendarWidget({
+  calendarMonth,
+  dateMode,
+  endDate,
+  locationEnabled,
+  onMonthChange,
+  onPickDate,
+  onQuickPick,
+  startDate
+}: {
+  calendarMonth: Date;
+  dateMode: "Any" | "Today" | "Tomorrow" | "Weekend" | "Range" | "Nearby";
+  endDate: string;
+  locationEnabled: boolean;
+  onMonthChange: (date: Date) => void;
+  onPickDate: (value: string) => void;
+  onQuickPick: (mode: "Any" | "Today" | "Tomorrow" | "Weekend" | "Range" | "Nearby") => void;
+  startDate: string;
+}) {
+  return (
+    <section className="glass-card min-h-[430px] rounded-[1.5rem] p-3 text-ink">
+      <div className="mb-3 flex items-center justify-between gap-3 px-1">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-cactus">Calendar</p>
+          <h3 className="mt-1 text-xl font-black text-ink">Pick the date.</h3>
+        </div>
+        <CalendarDays className="h-5 w-5 text-cactus" />
+      </div>
+      <DateCalendarPicker
+        calendarMonth={calendarMonth}
+        dateMode={dateMode}
+        endDate={endDate}
+        locationEnabled={locationEnabled}
+        onClearDates={() => onQuickPick("Any")}
+        onMonthChange={onMonthChange}
+        onPickDate={onPickDate}
+        onQuickPick={onQuickPick}
+        startDate={startDate}
+      />
+    </section>
+  );
+}
+
+function StoryLabel({ children, tone }: { children: React.ReactNode; tone: "lime" | "orange" | "blue" }) {
+  return (
+    <span className={cn(
+      "inline-flex w-fit rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] shadow-soft",
+      tone === "lime" && "bg-neon text-emerald-950",
+      tone === "orange" && "bg-[#ffb86b] text-emerald-950",
+      tone === "blue" && "bg-sky-200 text-emerald-950"
+    )}>
+      {children}
+    </span>
+  );
+}
+
+function StoryMetadataRow({ primary, secondary, compact = false }: { primary: string; secondary: string; compact?: boolean }) {
+  return (
+    <div className={cn("mt-4 flex flex-wrap items-center gap-2 font-bold text-white/78", compact ? "text-[11px]" : "text-sm")}>
+      <span>{primary}</span>
+      <span className="text-white/42">•</span>
+      <span>{secondary}</span>
+    </div>
+  );
+}
+
 function ExploreView({
   events,
+  places,
+  articles,
   locationEnabled,
   savedEvents,
+  savedPlaces,
+  visitedPlaces,
   preferredAreas,
   preferredVibes,
   onSave,
+  onSavePlace,
+  onVisitPlace,
+  onOpenPlace,
   onOpenDetails,
   onPreferredArea,
   onPreferredVibe
 }: {
   events: EventItem[];
+  places: UnifiedPlace[];
+  articles: AtxArticle[];
   locationEnabled: boolean;
   savedEvents: string[];
+  savedPlaces: string[];
+  visitedPlaces: string[];
   preferredAreas: Area[];
   preferredVibes: VibeTag[];
   onSave: (id: string) => void;
+  onSavePlace: (id: string) => void;
+  onVisitPlace: (id: string) => void;
+  onOpenPlace: (place: UnifiedPlace) => void;
   onOpenDetails: (event: EventItem) => void;
   onPreferredArea: (areas: Area[]) => void;
   onPreferredVibe: (vibes: VibeTag[]) => void;
@@ -1268,17 +2547,22 @@ function ExploreView({
       });
   }, [area, dateMode, endDate, events, query, startDate, vibe]);
 
+  const placeResults = useMemo(() => {
+    return places
+      .filter((place) => placeMatchesQuery(place, query))
+      .filter((place) => vibe === "All" || place.vibeTags.includes(vibe))
+      .filter((place) => area === "All" || place.area === area)
+      .filter((place) => dateMode !== "Nearby" || (typeof place.distanceMiles === "number" && place.distanceMiles <= 8))
+      .sort((a, b) => {
+        if (dateMode === "Nearby") return (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99);
+        return b.popularityScore - a.popularityScore || a.name.localeCompare(b.name);
+      })
+      .slice(0, 12);
+  }, [area, dateMode, places, query, vibe]);
+
   useEffect(() => {
     setVisibleResultCount(24);
   }, [area, dateMode, endDate, query, startDate, vibe]);
-
-  useEffect(() => {
-    if (visibleResultCount >= results.length) return;
-    const timer = window.setTimeout(() => {
-      setVisibleResultCount((count) => Math.min(count + 24, results.length));
-    }, 450);
-    return () => window.clearTimeout(timer);
-  }, [results.length, visibleResultCount]);
 
   const visibleResults = useMemo(() => results.slice(0, visibleResultCount), [results, visibleResultCount]);
   function selectVibe(next: VibeTag | "All") {
@@ -1321,26 +2605,51 @@ function ExploreView({
   }
   const activeFilterCount = [query.trim(), vibe !== "All", area !== "All", dateMode !== "Any"].filter(Boolean).length;
   return (
-    <motion.section {...viewMotion} className="space-y-8 pt-6 md:pt-10">
-      <PageTitle kicker="Explore" title="Find your lane." copy="Search, set a date, or browse by mood." />
+    <motion.section {...viewMotion} className="space-y-8 pt-2 md:pt-4">
+      <ExploreGuidesFrontPage
+        articles={articles}
+        events={events}
+        places={places}
+        calendarMonth={calendarMonth}
+        dateMode={dateMode}
+        endDate={endDate}
+        locationEnabled={locationEnabled}
+        onMonthChange={setCalendarMonth}
+        onPickDate={selectCalendarDate}
+        onQuickPick={(mode) => {
+          setDateMode(mode);
+          if (mode !== "Range") {
+            setStartDate("");
+            setEndDate("");
+          }
+        }}
+        startDate={startDate}
+        onOpenDetails={onOpenDetails}
+        onOpenPlace={onOpenPlace}
+      />
+      <div className="flex items-center gap-3 pt-2">
+        <div className="h-px flex-1 bg-white/20" />
+        <span className="rounded-full border border-white/28 bg-white/20 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-bone/62 backdrop-blur-xl">Filters + listings</span>
+        <div className="h-px flex-1 bg-white/20" />
+      </div>
       <section className="glass-panel sticky top-20 z-30 rounded-[1.5rem] p-2 md:top-24 md:p-3">
         <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
-          <div className="flex h-11 w-[58vw] min-w-[190px] shrink-0 items-center gap-2 rounded-full border border-white/8 bg-white/8 px-3 transition focus-within:border-neon/40 focus-within:bg-white/12 md:w-auto md:min-w-[260px] md:flex-1 md:gap-3 md:rounded-2xl md:px-4">
-            <Search className="h-5 w-5 shrink-0 text-neon" />
-            <input className="w-full min-w-0 bg-transparent text-sm text-bone outline-none placeholder:text-bone/38" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search events or venues..." />
+          <div className="flex h-11 w-[58vw] min-w-[190px] shrink-0 items-center gap-2 rounded-full border border-white/28 bg-white/24 px-3 transition focus-within:border-neon/50 focus-within:bg-white/34 md:w-auto md:min-w-[260px] md:flex-1 md:gap-3 md:rounded-2xl md:px-4">
+            <Search className="h-5 w-5 shrink-0 text-emerald-100" />
+            <input className="w-full min-w-0 bg-transparent text-sm text-bone outline-none placeholder:text-bone/38" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search food, events, places..." />
             {query ? <button className="grid h-7 w-7 place-items-center rounded-full bg-white/10" onClick={() => setQuery("")} aria-label="Clear search"><X className="h-4 w-4" /></button> : null}
           </div>
           <BrowseButton label="Date" value={dateLabel(dateMode, startDate, endDate)} active={dateMode !== "Any"} open={openFilter === "date"} onClick={() => setOpenFilter(openFilter === "date" ? null : "date")} />
           <BrowseButton label="Vibe" value={vibe} active={vibe !== "All"} open={openFilter === "vibe"} onClick={() => setOpenFilter(openFilter === "vibe" ? null : "vibe")} />
           <BrowseButton label="Area" value={areaLabel(area)} active={area !== "All"} open={openFilter === "area"} onClick={() => setOpenFilter(openFilter === "area" ? null : "area")} />
-          <button className="h-11 shrink-0 rounded-full bg-bone px-4 text-xs font-black text-ink transition hover:bg-neon md:rounded-2xl" onClick={resetFilters}>
-            {activeFilterCount ? `Clear ${activeFilterCount}` : `${results.length} results`}
+          <button className="h-11 shrink-0 rounded-full bg-neon px-4 text-xs font-black text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)] transition hover:bg-[#35E56B] md:rounded-2xl" onClick={resetFilters}>
+            {activeFilterCount ? `Clear ${activeFilterCount}` : `${results.length + placeResults.length} results`}
           </button>
         </div>
 
         <AnimatePresence>
           {openFilter ? (
-            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="mt-3 rounded-[1.25rem] border border-white/10 bg-black/24 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+            <motion.div initial={{ opacity: 0, y: -6, scale: 0.98, filter: "blur(8px)" }} animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }} exit={{ opacity: 0, y: -6, scale: 0.98, filter: "blur(8px)" }} className="mt-3 rounded-[1.25rem] border border-white/28 bg-white/22 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.36)] backdrop-blur-2xl">
               {openFilter === "date" ? (
                 <DateCalendarPicker
                   calendarMonth={calendarMonth}
@@ -1406,10 +2715,28 @@ function ExploreView({
       </section>
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm font-bold text-bone/58">
         <p>
-          {results.length ? `Showing ${visibleResults.length} of ${results.length}` : "No"} {area !== "All" ? `${areaLabel(area)} ` : ""}results
+          {results.length || placeResults.length ? `Showing ${visibleResults.length + placeResults.length} of ${results.length + placeResults.length}` : "No"} {area !== "All" ? `${areaLabel(area)} ` : ""}results
         </p>
         {area === "Burbs" ? <p className="text-bone/42">Suburbs only. No in-town Austin venues.</p> : null}
       </div>
+      {placeResults.length ? (
+        <section>
+          <SectionHeader kicker="Unified places" title="Restaurants, bars, rooms." />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {placeResults.map((place) => (
+              <UnifiedPlaceCard
+                key={place.id}
+                place={place}
+                saved={savedPlaces.includes(place.id)}
+                visited={visitedPlaces.includes(place.id)}
+                onSave={onSavePlace}
+                onVisit={onVisitPlace}
+                onOpen={onOpenPlace}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {visibleResults.map((event) => (
           <EventCard event={event} key={event.id} saved={savedEvents.includes(event.id)} onSave={onSave} onOpenDetails={onOpenDetails} />
@@ -1418,19 +2745,57 @@ function ExploreView({
       {visibleResults.length < results.length ? (
         <div className="flex justify-center">
           <button
-            className="rounded-full bg-bone px-5 py-3 text-xs font-black text-ink transition hover:bg-neon"
+            className="rounded-full bg-neon px-5 py-3 text-xs font-black text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)] transition hover:bg-[#35E56B]"
             onClick={() => setVisibleResultCount((count) => Math.min(count + 24, results.length))}
           >
             Show more ({visibleResults.length}/{results.length})
           </button>
         </div>
       ) : null}
-      {!results.length ? <EmptyPanel message="Nothing there yet. Try fewer filters." /> : null}
+      {!results.length && !placeResults.length ? <EmptyPanel message="Nothing there yet. Try fewer filters." /> : null}
     </motion.section>
   );
 }
 
-function PlanView({ events, venues, savedEvents, savedVenues, onSaveEvent, onSaveVenue, onOpenDetails }: { events: EventItem[]; venues: VenueItem[]; savedEvents: string[]; savedVenues: string[]; onSaveEvent: (id: string) => void; onSaveVenue: (id: string) => void; onOpenDetails: (event: EventItem) => void }) {
+function PlanView({
+  events,
+  venues,
+  places,
+  savedEvents,
+  savedVenues,
+  savedPlaces,
+  visitedPlaces,
+  customLists,
+  friendProfiles,
+  onSaveEvent,
+  onSaveVenue,
+  onSavePlace,
+  onVisitPlace,
+  onOpenPlace,
+  onAddPlaceToList,
+  onRemovePlaceFromList,
+  onFriendProfiles,
+  onOpenDetails
+}: {
+  events: EventItem[];
+  venues: VenueItem[];
+  places: UnifiedPlace[];
+  savedEvents: string[];
+  savedVenues: string[];
+  savedPlaces: string[];
+  visitedPlaces: string[];
+  customLists: Record<string, string[]>;
+  friendProfiles: FriendTasteProfile[];
+  onSaveEvent: (id: string) => void;
+  onSaveVenue: (id: string) => void;
+  onSavePlace: (id: string) => void;
+  onVisitPlace: (id: string) => void;
+  onOpenPlace: (place: UnifiedPlace) => void;
+  onAddPlaceToList: (listName: string, placeId: string) => void;
+  onRemovePlaceFromList: (listName: string, placeId: string) => void;
+  onFriendProfiles: (next: FriendTasteProfile[] | ((current: FriendTasteProfile[]) => FriendTasteProfile[])) => void;
+  onOpenDetails: (event: EventItem) => void;
+}) {
   const [areaFilter, setAreaFilter] = useState<Area | "All">("All");
   const [sortMode, setSortMode] = useState<"Soonest" | "Popular" | "Neighborhood">("Soonest");
   const [planMode, setPlanMode] = useState<"Timeline" | "Neighborhood" | "Places">("Timeline");
@@ -1454,6 +2819,16 @@ function PlanView({ events, venues, savedEvents, savedVenues, onSaveEvent, onSav
         return (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99);
       });
   }, [areaFilter, savedVenues, sortMode, venues]);
+  const placePlans = useMemo(() => {
+    return places
+      .filter((place) => savedPlaces.includes(place.id))
+      .filter((place) => areaFilter === "All" || place.area === areaFilter)
+      .sort((a, b) => {
+        if (sortMode === "Popular") return b.popularityScore - a.popularityScore;
+        if (sortMode === "Neighborhood") return a.area.localeCompare(b.area) || a.name.localeCompare(b.name);
+        return (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99);
+      });
+  }, [areaFilter, places, savedPlaces, sortMode]);
   const tonight = planned.filter((event) => isTonight(event));
   const weekend = planned.filter((event) => !isTonight(event) && isThisWeekend(event));
   const later = planned.filter((event) => !isTonight(event) && !isThisWeekend(event)).slice(0, 20);
@@ -1463,8 +2838,21 @@ function PlanView({ events, venues, savedEvents, savedVenues, onSaveEvent, onSav
   return (
     <motion.section {...viewMotion} className="space-y-10 pt-6 md:pt-10">
       <PageTitle kicker="Plan" title="Your upcoming life." copy="Saved events stay fresh. Saved places keep sending signals." />
-      {!planned.length && !venuePlans.length ? <EmptyPanel message="No plans yet. Let’s fix that." /> : null}
+      {!planned.length && !venuePlans.length && !placePlans.length ? <EmptyPanel message="No plans yet. Let’s fix that." /> : null}
       <PlanControls areaFilter={areaFilter} sortMode={sortMode} planMode={planMode} onAreaFilter={setAreaFilter} onSortMode={setSortMode} onPlanMode={setPlanMode} />
+      <PlanIntelligencePanel
+        places={places}
+        savedPlaces={placePlans}
+        visitedPlaces={visitedPlaces}
+        customLists={customLists}
+        friendProfiles={friendProfiles}
+        onOpenPlace={onOpenPlace}
+        onSavePlace={onSavePlace}
+        onVisitPlace={onVisitPlace}
+        onAddPlaceToList={onAddPlaceToList}
+        onRemovePlaceFromList={onRemovePlaceFromList}
+        onFriendProfiles={onFriendProfiles}
+      />
       {planMode === "Timeline" ? (
         <>
           <PlanGroup title="Tonight" events={tonight} onRemove={onSaveEvent} onOpenDetails={onOpenDetails} />
@@ -1493,6 +2881,24 @@ function PlanView({ events, venues, savedEvents, savedVenues, onSaveEvent, onSav
           </FullBleedRail>
         </section>
       ) : null}
+      {placePlans.length ? (
+        <section>
+          <SectionHeader kicker="Saved food + places" title="Your unified Austin list." />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {placePlans.map((place) => (
+              <UnifiedPlaceCard
+                key={place.id}
+                place={place}
+                saved={savedPlaces.includes(place.id)}
+                visited={visitedPlaces.includes(place.id)}
+                onSave={onSavePlace}
+                onVisit={onVisitPlace}
+                onOpen={onOpenPlace}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </motion.section>
   );
 }
@@ -1502,7 +2908,7 @@ function PlanControls({ areaFilter, sortMode, planMode, onAreaFilter, onSortMode
     <section className="glass-panel rounded-[1.5rem] p-4">
       <div className="grid gap-4 lg:grid-cols-[auto_1fr] lg:items-center">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-mezcal">Tune your plan</p>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Tune your plan</p>
           <p className="mt-1 text-sm font-bold text-bone/52">Filter by neighborhood. Sort by what matters now.</p>
         </div>
         <div className="flex flex-col gap-3 md:items-end">
@@ -1514,7 +2920,7 @@ function PlanControls({ areaFilter, sortMode, planMode, onAreaFilter, onSortMode
             ))}
           </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
-          <label className="flex min-w-[220px] items-center gap-3 rounded-full border border-white/10 bg-night/70 px-4 py-3 text-xs font-black text-bone/72">
+          <label className="flex min-w-[220px] items-center gap-3 rounded-full border border-white/28 bg-white/20 px-4 py-3 text-xs font-black text-bone/78 backdrop-blur-xl">
             <span className="shrink-0 uppercase tracking-[0.14em] text-bone/38">Location</span>
             <select
               className="min-w-0 flex-1 bg-transparent text-sm font-black text-bone outline-none"
@@ -1548,16 +2954,16 @@ function PlanVenueCard({ venue, onRemove }: { venue: VenueItem; onRemove: (id: s
     <motion.article className="relative min-h-[300px] overflow-hidden rounded-[1.65rem] border border-white/10 bg-white/8 shadow-card" whileHover={{ y: -3 }} transition={{ duration: 0.22 }}>
       <SafeImage className="object-cover opacity-76" src={venue.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 90vw, 420px" />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.10)_0%,rgba(0,0,0,0.24)_35%,rgba(0,0,0,0.74)_72%,rgba(0,0,0,0.98)_100%)]" />
-      <button className="absolute right-3 top-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-black/45 text-bone backdrop-blur-xl transition hover:bg-bone hover:text-ink" onClick={() => onRemove(venue.id)} aria-label={`Remove ${venue.name} from plan`}>
+      <button className="absolute right-3 top-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-white/26 text-bone shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] backdrop-blur-xl transition hover:bg-white/70 hover:text-ink" onClick={() => onRemove(venue.id)} aria-label={`Remove ${venue.name} from plan`}>
         <X className="h-4 w-4" />
       </button>
-      <div className="absolute inset-x-0 bottom-0 p-4">
+        <div className="media-copy absolute inset-x-0 bottom-0 p-4">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-neon">{venue.neighborhoodPersonality}</p>
         <Link className="mt-2 block text-left text-3xl font-black leading-none underline-offset-4 transition hover:text-neon hover:underline" href={`/places/${venue.id}`}>
           {venue.name}
         </Link>
         <div className="mt-4 flex flex-wrap gap-2">
-          <span className="rounded-full bg-neon/14 px-3 py-1.5 text-xs font-black text-neon">{areaLabel(venue.area)}</span>
+          <span className="rounded-full bg-neon/18 px-3 py-1.5 text-xs font-black text-emerald-100">{areaLabel(venue.area)}</span>
           <Link className="rounded-full bg-white/12 px-3 py-1.5 text-xs font-bold transition hover:bg-white/20" href={`/places/${venue.id}`}>
             {eventLabel}
           </Link>
@@ -1574,9 +2980,9 @@ function PlanGroup({ title, events, onRemove, onOpenDetails }: { title: string; 
       <SectionHeader kicker={String(events.length)} title={title} />
       <div className="space-y-3">
         {events.map((event) => (
-          <article className="relative grid gap-3 rounded-[1.5rem] border border-white/10 bg-white/7 p-3 md:grid-cols-[160px_1fr]" key={event.id}>
+          <article className="glass-panel relative grid gap-3 rounded-[1.5rem] p-3 md:grid-cols-[160px_1fr]" key={event.id}>
             <button className="absolute inset-0 z-10 cursor-pointer rounded-[1.5rem] text-left" onClick={() => onOpenDetails(event)} aria-label={`Open details for ${event.title}`} />
-            <button className="absolute right-3 top-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-black/45 text-bone backdrop-blur-xl transition hover:bg-bone hover:text-ink" onClick={() => onRemove(event.id)} aria-label={`Remove ${event.title} from plan`}>
+            <button className="absolute right-3 top-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-white/26 text-bone shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] backdrop-blur-xl transition hover:bg-white/70 hover:text-ink" onClick={() => onRemove(event.id)} aria-label={`Remove ${event.title} from plan`}>
               <X className="h-4 w-4" />
             </button>
             <div className="relative min-h-36 overflow-hidden rounded-2xl">
@@ -1589,8 +2995,8 @@ function PlanGroup({ title, events, onRemove, onOpenDetails }: { title: string; 
                 <p className="mt-2 text-sm text-bone/58">{formatEventTime(event)}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <span className="rounded-full bg-neon/14 px-3 py-1.5 text-xs font-black text-neon">{areaLabel(event.area)}</span>
-                <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-bone/64">{event.neighborhoodPersonality}</span>
+                <span className="rounded-full bg-neon/18 px-3 py-1.5 text-xs font-black text-emerald-100">{areaLabel(event.area)}</span>
+                <span className="rounded-full bg-white/18 px-3 py-1.5 text-xs font-bold text-bone/72">{event.neighborhoodPersonality}</span>
               </div>
             </div>
           </article>
@@ -1600,7 +3006,27 @@ function PlanGroup({ title, events, onRemove, onOpenDetails }: { title: string; 
   );
 }
 
-function VenuesView({ events, venues, locationEnabled, savedVenues, onSaveVenue }: { events: EventItem[]; venues: VenueItem[]; locationEnabled: boolean; savedVenues: string[]; onSaveVenue: (id: string) => void }) {
+function VenuesView({
+  events,
+  venues,
+  places,
+  locationEnabled,
+  savedVenues,
+  savedPlaces,
+  onSaveVenue,
+  onSavePlace,
+  onOpenPlace
+}: {
+  events: EventItem[];
+  venues: VenueItem[];
+  places: UnifiedPlace[];
+  locationEnabled: boolean;
+  savedVenues: string[];
+  savedPlaces: string[];
+  onSaveVenue: (id: string) => void;
+  onSavePlace: (id: string) => void;
+  onOpenPlace: (place: UnifiedPlace) => void;
+}) {
   const eventById = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
   const sortedVenues = useMemo(() => [...venues].sort((a, b) => b.popularityScore - a.popularityScore || b.upcomingCount - a.upcomingCount), [venues]);
   const evergreen = sortedVenues.filter((venue) => venue.source === "evergreen" || (venue.evergreenCount ?? 0) > 0).slice(0, 12);
@@ -1609,6 +3035,9 @@ function VenuesView({ events, venues, locationEnabled, savedVenues, onSaveVenue 
   const musicRooms = sortedVenues.filter((venue) => venue.upcomingEventIds.some((id) => eventById.get(id)?.vibeTags.includes("Live Music"))).slice(0, 12);
   const comedyRooms = sortedVenues.filter((venue) => venue.upcomingEventIds.some((id) => eventById.get(id)?.vibeTags.includes("Comedy"))).slice(0, 12);
   const nearby = venues.filter((venue) => typeof venue.distanceMiles === "number").sort((a, b) => (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99)).slice(0, 12);
+  const restaurants = places.filter((place) => place.kind === "restaurant").slice(0, 18);
+  const bars = places.filter((place) => place.kind === "bar").slice(0, 12);
+  const unifiedNearby = places.filter((place) => typeof place.distanceMiles === "number").sort((a, b) => (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99)).slice(0, 12);
   const areaRows = areaFilters
     .map((area) => ({ area, venues: sortedVenues.filter((venue) => venue.area === area).slice(0, 10) }))
     .filter((row) => row.venues.length);
@@ -1616,6 +3045,9 @@ function VenuesView({ events, venues, locationEnabled, savedVenues, onSaveVenue 
     <motion.section {...viewMotion} className="space-y-12 pt-6 md:space-y-16 md:pt-10">
       <PageTitle kicker="Places" title="Pick the room, then the night." copy="Browse by neighborhood when geography matters. Browse by vibe when it does not." />
       <VenueDecisionStrip />
+      {locationEnabled ? <PlaceRail kicker="Near you" title="Closest food, bars, rooms" places={unifiedNearby} savedPlaces={savedPlaces} visitedPlaces={[]} onSavePlace={onSavePlace} onOpenPlace={onOpenPlace} /> : null}
+      <PlaceRail kicker="ATX Eats" title="Restaurants worth anchoring around" places={restaurants} savedPlaces={savedPlaces} visitedPlaces={[]} onSavePlace={onSavePlace} onOpenPlace={onOpenPlace} />
+      <PlaceRail kicker="Before or after" title="Bars and easy second stops" places={bars} savedPlaces={savedPlaces} visitedPlaces={[]} onSavePlace={onSavePlace} onOpenPlace={onOpenPlace} />
       {locationEnabled ? <VenueRail kicker="Near you" title="Closest with a pulse" venues={nearby} savedVenues={savedVenues} onSaveVenue={onSaveVenue} /> : null}
       <VenueRail kicker="Always good" title="Popular hang outs" venues={evergreen} savedVenues={savedVenues} onSaveVenue={onSaveVenue} />
       <section id="neighborhoods" className="scroll-mt-28">
@@ -1699,27 +3131,27 @@ function EventCard({ event, saved, onSave, onOpenDetails, size = "default", tone
   const prominent = size === "hero" || size === "tall" || size === "carousel";
   return (
     <motion.article
-      className={cn("group relative overflow-hidden rounded-[1.65rem] border shadow-card transition-colors", light ? "border-ink/10 bg-ink text-bone" : "border-white/10 bg-white/[0.075]", size === "carousel" ? "h-[62vh] min-h-[430px] max-h-[620px]" : size === "hero" ? "min-h-[380px]" : size === "tall" ? "min-h-[420px]" : size === "compact" ? "min-h-[255px]" : "min-h-[330px]")}
+      className={cn("group relative overflow-hidden rounded-[1.65rem] border shadow-card transition-colors", light ? "border-white/70 bg-white/78 text-ink backdrop-blur-xl" : "border-white/24 bg-white/[0.12]", size === "carousel" ? "h-[62vh] min-h-[430px] max-h-[620px]" : size === "hero" ? "min-h-[380px]" : size === "tall" ? "min-h-[420px]" : size === "compact" ? "min-h-[255px]" : "min-h-[330px]")}
       whileHover={{ y: -4 }}
       transition={{ duration: 0.22, ease: "easeOut" }}
     >
       <button className="absolute inset-0 z-10 cursor-pointer text-left" onClick={() => onOpenDetails(event)} aria-label={`Open details for ${event.title}`} />
       <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={event.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 90vw, 420px" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.24)_38%,rgba(0,0,0,0.78)_76%,rgba(0,0,0,0.98)_100%)]" />
-      <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-black via-black/78 to-transparent" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.16)_0%,rgba(0,0,0,0.34)_34%,rgba(0,0,0,0.84)_74%,rgba(0,0,0,0.98)_100%)]" />
+      <div className="absolute inset-x-0 bottom-0 h-4/5 bg-gradient-to-t from-black via-black/82 to-transparent" />
       <div className="absolute inset-x-0 top-0 flex items-start justify-between p-3">
-        <span className="rounded-full bg-black/35 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-bone/82 backdrop-blur-xl">{dayLabel(event)}</span>
-        <button className={cn("relative z-20 grid h-10 w-10 place-items-center rounded-full backdrop-blur-xl transition", saved ? "bg-neon text-ink" : "bg-black/35 text-bone hover:bg-bone hover:text-ink")} onClick={(click) => { click.stopPropagation(); onSave(event.id); }} aria-label={saved ? "Unsave event" : "Save event"}>
+        <span className="media-chip rounded-full bg-white/26 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-bone/88 backdrop-blur-xl">{dayLabel(event)}</span>
+        <button className={cn("relative z-20 grid h-10 w-10 place-items-center rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.34)] backdrop-blur-xl transition", saved ? "bg-neon text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)]" : "bg-white/26 text-bone hover:bg-white/70 hover:text-ink")} onClick={(click) => { click.stopPropagation(); onSave(event.id); }} aria-label={saved ? "Unsave event" : "Save event"}>
           <Heart className={cn("h-5 w-5", saved && "fill-current")} />
         </button>
       </div>
-      <div className="absolute inset-x-0 bottom-0 p-4">
+      <div className="media-copy absolute inset-x-0 bottom-0 p-4">
         {prominent ? <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-neon">{event.neighborhoodPersonality}</p> : null}
         <h3 className={cn("break-words font-black leading-[1.04] tracking-[-0.02em]", size === "hero" ? "text-3xl md:text-5xl" : "text-2xl")}>{event.title}</h3>
         <p className="mt-2 line-clamp-1 text-xs font-semibold text-bone/66">{event.venueName} · {areaLabel(event.area)}</p>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-bold text-bone/86 backdrop-blur-xl">
-            <CalendarDays className="h-4 w-4" />
+          <span className="media-chip inline-flex items-center gap-2 rounded-full bg-white/14 px-3 py-2 text-xs font-bold text-bone/90 backdrop-blur-xl">
+            <CalendarDays className="h-4 w-4 text-emerald-100" />
             {prominent ? formatEventTime(event) : `${dayLabel(event)} · ${formatEventTime(event)}`}
           </span>
         </div>
@@ -1745,11 +3177,11 @@ function VenueCard({ venue, saved, onSave }: { venue: VenueItem; saved: boolean;
   return (
     <motion.article className="relative min-h-[300px] overflow-hidden rounded-[1.65rem] border border-white/10 bg-white/8 shadow-card" whileHover={{ y: -3 }} transition={{ duration: 0.22 }}>
       <SafeImage className="object-cover opacity-76" src={venue.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 90vw, 420px" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.10)_0%,rgba(0,0,0,0.24)_35%,rgba(0,0,0,0.74)_72%,rgba(0,0,0,0.98)_100%)]" />
-      <button className={cn("absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full backdrop-blur-xl", saved ? "bg-neon text-ink" : "bg-black/35 text-bone")} onClick={() => onSave(venue.id)} aria-label={saved ? "Unsave venue" : "Save venue"}>
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.16)_0%,rgba(0,0,0,0.32)_34%,rgba(0,0,0,0.82)_72%,rgba(0,0,0,0.98)_100%)]" />
+      <button className={cn("absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.34)] backdrop-blur-xl transition", saved ? "bg-neon text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)]" : "bg-white/26 text-bone hover:bg-white/70 hover:text-ink")} onClick={() => onSave(venue.id)} aria-label={saved ? "Unsave venue" : "Save venue"}>
         <Heart className={cn("h-5 w-5", saved && "fill-current")} />
       </button>
-      <div className="absolute inset-x-0 bottom-0 p-4">
+      <div className="media-copy absolute inset-x-0 bottom-0 p-4">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-neon">{venue.neighborhoodPersonality}</p>
         <Link className="mt-2 block text-left text-3xl font-black leading-none underline-offset-4 transition hover:text-neon hover:underline" href={`/places/${venue.id}`}>
           {venue.name}
@@ -1774,12 +3206,204 @@ function VenueCard({ venue, saved, onSave }: { venue: VenueItem; saved: boolean;
   );
 }
 
+function UnifiedPlaceCard({
+  place,
+  saved,
+  visited,
+  onSave,
+  onVisit,
+  onOpen
+}: {
+  place: UnifiedPlace;
+  saved: boolean;
+  visited: boolean;
+  onSave: (id: string) => void;
+  onVisit: (id: string) => void;
+  onOpen: (place: UnifiedPlace) => void;
+}) {
+  return (
+    <motion.article className="group relative min-h-[310px] overflow-hidden rounded-[1.65rem] border border-white/14 bg-white/10 shadow-card" whileHover={{ y: -3 }} transition={{ duration: 0.22 }}>
+      <button className="absolute inset-0 z-10 cursor-pointer text-left" onClick={() => onOpen(place)} aria-label={`Open details for ${place.name}`} />
+      <SafeImage className="object-cover opacity-78 transition duration-700 group-hover:scale-105" src={place.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 90vw, 420px" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.15)_0%,rgba(0,0,0,0.34)_32%,rgba(0,0,0,0.84)_72%,rgba(0,0,0,0.98)_100%)]" />
+      <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3">
+        <span className="media-chip rounded-full bg-white/28 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-bone backdrop-blur-xl">
+          {placeKindLabel(place.kind)}
+        </span>
+        <div className="flex gap-2">
+          <button className={cn("grid h-10 w-10 place-items-center rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.34)] backdrop-blur-xl transition", visited ? "bg-white text-ink" : "bg-white/24 text-bone hover:bg-white/70 hover:text-ink")} onClick={(click) => { click.stopPropagation(); onVisit(place.id); }} aria-label={visited ? "Mark unvisited" : "Mark visited"}>
+            <Check className="h-5 w-5" />
+          </button>
+          <button className={cn("grid h-10 w-10 place-items-center rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.34)] backdrop-blur-xl transition", saved ? "bg-neon text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)]" : "bg-white/24 text-bone hover:bg-white/70 hover:text-ink")} onClick={(click) => { click.stopPropagation(); onSave(place.id); }} aria-label={saved ? "Unsave place" : "Save place"}>
+            <Heart className={cn("h-5 w-5", saved && "fill-current")} />
+          </button>
+        </div>
+      </div>
+      <div className="media-copy absolute inset-x-0 bottom-0 p-4">
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-neon">{place.neighborhoodPersonality}</p>
+        <h3 className="mt-2 text-3xl font-black leading-none tracking-[-0.025em]">{place.name}</h3>
+        <p className="mt-3 line-clamp-2 text-sm font-semibold leading-6 text-bone/68">
+          {place.price ? `${place.price} · ` : ""}{place.vibe}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="rounded-full bg-neon/18 px-3 py-1.5 text-xs font-black text-emerald-100">{areaLabel(place.area)}</span>
+          {formatDistance(place.distanceMiles) ? <span className="rounded-full bg-white/14 px-3 py-1.5 text-xs font-bold text-bone/72">{formatDistance(place.distanceMiles)}</span> : null}
+          {place.articleTitles.length ? <span className="rounded-full bg-white/14 px-3 py-1.5 text-xs font-bold text-bone/72">{place.articleTitles.length} guides</span> : null}
+        </div>
+      </div>
+    </motion.article>
+  );
+}
+
+function placeKindLabel(kind: UnifiedPlace["kind"]) {
+  if (kind === "event-spot") return "Event spot";
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+function PlanIntelligencePanel({
+  places,
+  savedPlaces,
+  visitedPlaces,
+  customLists,
+  friendProfiles,
+  onOpenPlace,
+  onSavePlace,
+  onVisitPlace,
+  onAddPlaceToList,
+  onRemovePlaceFromList,
+  onFriendProfiles
+}: {
+  places: UnifiedPlace[];
+  savedPlaces: UnifiedPlace[];
+  visitedPlaces: string[];
+  customLists: Record<string, string[]>;
+  friendProfiles: FriendTasteProfile[];
+  onOpenPlace: (place: UnifiedPlace) => void;
+  onSavePlace: (id: string) => void;
+  onVisitPlace: (id: string) => void;
+  onAddPlaceToList: (listName: string, placeId: string) => void;
+  onRemovePlaceFromList: (listName: string, placeId: string) => void;
+  onFriendProfiles: (next: FriendTasteProfile[] | ((current: FriendTasteProfile[]) => FriendTasteProfile[])) => void;
+}) {
+  const [profileDraft, setProfileDraft] = useState("");
+  const topSaved = savedPlaces.slice(0, 3);
+  const friendMatch = useMemo(() => {
+    const friendTags = new Set(friendProfiles.flatMap((profile) => profile.tasteTags));
+    return places
+      .filter((place) => place.tags.some((tag) => friendTags.has(tag)) || place.vibeTags.some((tag) => friendTags.has(tag)))
+      .slice(0, 3);
+  }, [friendProfiles, places]);
+
+  function importFriend() {
+    try {
+      const parsed = JSON.parse(profileDraft) as FriendTasteProfile;
+      if (!Array.isArray(parsed.saved) || !Array.isArray(parsed.tasteTags)) return;
+      onFriendProfiles((current) => uniqBy([{ ...parsed, id: parsed.id || crypto.randomUUID(), name: parsed.name || "Austin friend" }, ...current], (profile) => profile.id));
+      setProfileDraft("");
+    } catch {
+      setProfileDraft("");
+    }
+  }
+
+  return (
+    <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="glass-panel rounded-[1.5rem] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Lists + context</p>
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.02em]">Your food memory is part of the plan.</h2>
+          </div>
+          <ListPlus className="h-5 w-5 shrink-0 text-emerald-100" />
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          {Object.entries(customLists).slice(0, 3).map(([name, ids]) => (
+            <div className="rounded-[1.15rem] border border-white/14 bg-white/10 p-3" key={name}>
+              <p className="text-sm font-black">{name}</p>
+              <p className="mt-1 text-xs font-bold text-bone/48">{ids.length} saved places</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+              {topSaved[0] ? (
+                <button className="mt-3 rounded-full bg-white/14 px-3 py-2 text-[11px] font-black text-bone/72 transition hover:bg-white/24" onClick={() => onAddPlaceToList(name, topSaved[0].id)}>
+                  Add {topSaved[0].name}
+                </button>
+              ) : null}
+              {ids[0] ? (
+                <button className="mt-3 rounded-full bg-white/14 px-3 py-2 text-[11px] font-black text-bone/72 transition hover:bg-white/24" onClick={() => onRemovePlaceFromList(name, ids[0])}>
+                  Remove one
+                </button>
+              ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+        {topSaved.length ? (
+          <div className="mt-5 grid gap-2">
+            {topSaved.map((place) => (
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/12 px-3 py-3 text-left transition hover:bg-white/20" key={place.id}>
+                <button className="min-w-0 flex-1 text-left" onClick={() => onOpenPlace(place)}>
+                  <span className="block text-sm font-black">{place.name}</span>
+                  <span className="mt-1 block text-xs font-bold text-bone/48">{visitedPlaces.includes(place.id) ? "Visited" : "Need to try"} · {place.vibe}</span>
+                </button>
+                <button className="rounded-full bg-white/12 px-3 py-1.5 text-[10px] font-black text-bone/70" onClick={() => onVisitPlace(place.id)}>
+                  {visitedPlaces.includes(place.id) ? "Undo" : "Visited"}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div className="glass-panel rounded-[1.5rem] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Group tools</p>
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.02em]">Friends stay one layer deeper.</h2>
+          </div>
+          <Users className="h-5 w-5 shrink-0 text-emerald-100" />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button className="inline-flex items-center gap-2 rounded-full bg-white/16 px-3 py-2 text-xs font-black text-bone/72 transition hover:bg-white/24" onClick={() => {
+            const profile = {
+              id: crypto.randomUUID(),
+              name: "My Austin taste",
+              saved: savedPlaces.map((place) => place.id),
+              visited: visitedPlaces,
+              tasteTags: uniq(savedPlaces.flatMap((place) => place.tags)).slice(0, 12),
+              exportedAt: new Date().toISOString()
+            };
+            navigator.clipboard?.writeText(JSON.stringify(profile, null, 2));
+          }}>
+            <Share2 className="h-4 w-4" /> Copy profile
+          </button>
+          <button className="inline-flex items-center gap-2 rounded-full bg-white/16 px-3 py-2 text-xs font-black text-bone/72 transition hover:bg-white/24" onClick={importFriend}>
+            <Copy className="h-4 w-4" /> Import draft
+          </button>
+        </div>
+        <textarea
+          className="mt-4 min-h-24 w-full resize-none rounded-[1.15rem] border border-white/18 bg-white/12 p-3 text-sm font-semibold text-bone outline-none placeholder:text-bone/34"
+          value={profileDraft}
+          onChange={(event) => setProfileDraft(event.target.value)}
+          placeholder="Paste an ATX Eats friend profile JSON..."
+        />
+        <p className="mt-3 text-xs font-bold leading-5 text-bone/44">{friendProfiles.length} friend profiles imported. Halfway picks use shared taste signals without taking over the main navigation.</p>
+        {friendMatch.length ? (
+          <div className="mt-4 grid gap-2">
+            {friendMatch.map((place) => (
+              <button className="rounded-2xl bg-white/12 px-3 py-3 text-left text-sm font-black transition hover:bg-white/20" key={place.id} onClick={() => onOpenPlace(place)}>
+                {place.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function PageTitle({ kicker, title, copy }: { kicker: string; title: string; copy: string }) {
   return (
     <div className="max-w-4xl">
-      <p className="inline-flex rounded-full border border-white/10 bg-white/8 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-neon/82 backdrop-blur-xl">{kicker}</p>
+      <p className="inline-flex rounded-full border border-white/28 bg-white/28 px-3 py-2 text-xs font-black uppercase tracking-[0.2em] text-bone/84 shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] backdrop-blur-xl">{kicker}</p>
       <h1 className="mt-4 font-display text-5xl font-black leading-[0.92] tracking-[-0.04em] text-balance md:text-7xl">{title}</h1>
-      <p className="mt-4 max-w-2xl text-lg font-medium leading-8 text-bone/64">{copy}</p>
+      <p className="mt-4 max-w-2xl text-lg font-medium leading-8 text-bone/72">{copy}</p>
     </div>
   );
 }
@@ -1788,7 +3412,7 @@ function SectionHeader({ kicker, title }: { kicker: string; title: string }) {
   return (
     <div className="mb-4 flex items-end justify-between gap-4">
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-mezcal/90">{kicker}</p>
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100/90">{kicker}</p>
         <h2 className="mt-2 font-display text-3xl font-black leading-none tracking-[-0.035em] md:text-5xl">{title}</h2>
       </div>
     </div>
@@ -1797,7 +3421,7 @@ function SectionHeader({ kicker, title }: { kicker: string; title: string }) {
 
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button className={cn("shrink-0 rounded-full px-3 py-2 text-xs font-black transition", active ? "bg-neon text-ink" : "bg-white/8 text-bone/64 hover:bg-white/14 hover:text-bone")} onClick={onClick}>
+    <button className={cn("shrink-0 rounded-full px-3 py-2 text-xs font-black transition", active ? "bg-neon text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.24)]" : "bg-white/18 text-bone/72 hover:bg-white/28 hover:text-bone")} onClick={onClick}>
       {children}
     </button>
   );
@@ -1912,7 +3536,7 @@ function DateCalendarPicker({
                   day.inMonth && !past && !selectedStart && !selectedEnd && !inRange && !inPreviewRange && !previewEndpoint && !quickSelected && "bg-white/6 text-bone/70 hover:bg-white/12 hover:text-bone",
                   (inRange || inPreviewRange) && "bg-neon/18 text-bone ring-1 ring-neon/18",
                   quickSelected && "bg-neon/22 text-bone ring-1 ring-neon/50",
-                  (selectedStart || selectedEnd || previewEndpoint) && "bg-neon text-ink shadow-[0_0_24px_rgba(214,255,79,0.22)]",
+                  (selectedStart || selectedEnd || previewEndpoint) && "bg-neon text-ink shadow-[0_0_24px_rgba(48,209,88,0.24)]",
                   today && !selectedStart && !selectedEnd && !quickSelected && "ring-1 ring-neon/45"
                 )}
                 disabled={past}
@@ -1939,7 +3563,7 @@ function BrowseButton({ label, value, active, open, onClick }: { label: string; 
     <button
       className={cn(
         "inline-flex h-11 max-w-[54vw] shrink-0 items-center gap-2 rounded-full border px-3 text-left text-xs font-black transition sm:max-w-full",
-        active || open ? "border-neon/45 bg-neon/14 text-bone" : "border-white/10 bg-white/8 text-bone/66 hover:bg-white/12 hover:text-bone"
+        active || open ? "border-neon/45 bg-neon/22 text-bone shadow-[0_8px_24px_rgba(48,209,88,0.18)]" : "border-white/28 bg-white/18 text-bone/72 hover:bg-white/28 hover:text-bone"
       )}
       onClick={onClick}
     >
@@ -1947,7 +3571,7 @@ function BrowseButton({ label, value, active, open, onClick }: { label: string; 
         <span className="text-bone/45">{label}</span>
         <span className="text-bone/38">:</span> {value}
       </span>
-      <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-black", active || open ? "bg-neon text-ink" : "bg-white/10 text-bone/60")}>
+      <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-black", active || open ? "bg-neon text-emerald-950" : "bg-white/20 text-bone/70")}>
         {open ? "x" : "+"}
       </span>
     </button>
@@ -2029,6 +3653,197 @@ function personalizedScore(event: EventItem, preferredVibes: VibeTag[], preferre
   return event.scores.smart + vibeBoost + areaBoost + distanceBoost;
 }
 
+function dedupeHomepageEvents(events: EventItem[]) {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    const key = `${normalizeEventIdentity(event.title)}|${normalizeEventIdentity(event.venueName)}|${eventWeekKey(event)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function allocateExploreEvents(events: EventItem[], places: UnifiedPlace[], maxAppearances = 2) {
+  const counts = new Map<string, number>();
+  const ranked = [...events].sort((a, b) => b.popularityScore + b.attendeeCount / 24 - (a.popularityScore + a.attendeeCount / 24) || sortSoonest(a, b));
+  const soonest = [...events].sort(sortSoonest);
+  const guideDefinitions: Array<{ label: string; title: string; copy: string; tone: "lime" | "orange" | "blue"; candidates: EventItem[] }> = [
+    {
+      label: "Tonight near you",
+      title: "Start with tonight, then add the easy nearby stop.",
+      copy: "A strong event anchor with nearby food, bars, or rooms that keep the plan moving.",
+      tone: "lime",
+      candidates: ranked.filter((event) => isTonight(event) || isToday(event))
+    },
+    {
+      label: "Live music night",
+      title: "Let a room set the tone.",
+      copy: "Music-first plans with nearby options for the before or after.",
+      tone: "blue",
+      candidates: ranked.filter((event) => event.vibeTags.includes("Live Music") || /music|dj|concert|band/i.test(`${event.title} ${event.category}`))
+    },
+    {
+      label: "Free plans",
+      title: "Good plans without a ticket tax.",
+      copy: "Free anchors with enough nearby context to make leaving the house feel easy.",
+      tone: "lime",
+      candidates: ranked.filter((event) => event.isFree || event.vibeTags.includes("Free"))
+    },
+    {
+      label: "Date night",
+      title: "A low-pressure plan with a clear next move.",
+      copy: "Event-led date plans with food or drinks nearby, not a giant decision tree.",
+      tone: "orange",
+      candidates: ranked.filter((event) => event.vibeTags.includes("Date Night"))
+    },
+    {
+      label: "Weekend anchors",
+      title: "Weekend events worth planning around.",
+      copy: "Bigger Austin outings with supporting stops close enough to keep the night fluid.",
+      tone: "blue",
+      candidates: ranked.filter((event) => isThisWeekend(event) || isNextWeek(event))
+    },
+    {
+      label: "Before + after",
+      title: "Pick the event, then make the rest obvious.",
+      copy: "Useful anchors that pair naturally with nearby food, patios, bars, or coffee.",
+      tone: "orange",
+      candidates: ranked
+    }
+  ];
+
+  function keyFor(event: EventItem) {
+    return exploreEventKey(event);
+  }
+
+  function canUse(event: EventItem) {
+    return (counts.get(keyFor(event)) ?? 0) < maxAppearances;
+  }
+
+  function mark(event: EventItem) {
+    const key = keyFor(event);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    return event;
+  }
+
+  function take(candidates: EventItem[], count: number, exclude: EventItem[] = []) {
+    const excluded = new Set(exclude.map(keyFor));
+    const picked: EventItem[] = [];
+    for (const event of candidates) {
+      const key = keyFor(event);
+      if (excluded.has(key) || !canUse(event) || picked.some((item) => keyFor(item) === key)) continue;
+      picked.push(mark(event));
+      if (picked.length >= count) break;
+    }
+    return picked;
+  }
+
+  const guideCards: ExploreGuideCard[] = [];
+  for (const definition of guideDefinitions) {
+    const anchor = take(definition.candidates.length ? definition.candidates : ranked, 1)[0];
+    if (!anchor) continue;
+    const nearbyEvents = take(findNearbySameTimeEvents(anchor, ranked), 2, [anchor]);
+    guideCards.push({
+      id: `guide-${definition.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${anchor.id}`,
+      label: definition.label,
+      title: definition.title,
+      copy: definition.copy,
+      anchor,
+      nearbyEvents,
+      addOns: findNearbyAddOns(anchor, places),
+      tone: definition.tone
+    });
+  }
+
+  const sidebarPromo = take(ranked.filter((event) => isTonight(event) || isToday(event)), 1)[0] ?? take(ranked, 1)[0];
+  const soonestCalendar = take(soonest, 5);
+  const mostBrowsed = take(ranked, 5);
+  const sidebarPlace = places
+    .filter((place) => place.kind === "restaurant" || place.kind === "bar" || place.kind === "venue")
+    .sort((a, b) => b.popularityScore + b.upcomingCount * 8 - (a.popularityScore + a.upcomingCount * 8))[0];
+
+  return { guideCards, sidebarPromo, sidebarPlace, soonestCalendar, mostBrowsed };
+}
+
+function buildExploreGuideCards(events: EventItem[], places: UnifiedPlace[]) {
+  return allocateExploreEvents(events, places).guideCards;
+}
+
+function findNearbyAddOns(event: EventItem, places: UnifiedPlace[]) {
+  return places
+    .filter((place) => place.kind === "restaurant" || place.kind === "bar" || place.kind === "venue" || place.kind === "park")
+    .map((place) => ({
+      place,
+      score:
+        (place.area === event.area ? 50 : 0) +
+        (typeof place.distanceMiles === "number" ? Math.max(0, 24 - place.distanceMiles * 3) : 0) +
+        (place.vibeTags.some((tag) => event.vibeTags.includes(tag)) ? 16 : 0) +
+        place.popularityScore +
+        place.upcomingCount * 4
+    }))
+    .sort((a, b) => b.score - a.score)
+    .map((item) => item.place)
+    .slice(0, 4);
+}
+
+function findNearbySameTimeEvents(anchor: EventItem, events: EventItem[]) {
+  const anchorStart = new Date(anchor.startDateTime);
+  return events
+    .filter((event) => exploreEventKey(event) !== exploreEventKey(anchor))
+    .filter((event) => event.area === anchor.area || event.venueName === anchor.venueName || event.date === anchor.date)
+    .sort((a, b) => {
+      const aStart = new Date(a.startDateTime);
+      const bStart = new Date(b.startDateTime);
+      const aTimeGap = Number.isFinite(anchorStart.getTime()) && Number.isFinite(aStart.getTime()) ? Math.abs(aStart.getTime() - anchorStart.getTime()) / 3_600_000 : 24;
+      const bTimeGap = Number.isFinite(anchorStart.getTime()) && Number.isFinite(bStart.getTime()) ? Math.abs(bStart.getTime() - anchorStart.getTime()) / 3_600_000 : 24;
+      return aTimeGap - bTimeGap || b.popularityScore - a.popularityScore;
+    });
+}
+
+function curateLocalArticles(articles: AtxArticle[]) {
+  const preferred = [/live.?music/i, /dive.?bar/i, /patio/i, /south.?lamar/i, /south.?congress/i, /university|campus|ut/i, /brew/i, /hidden|underrated/i, /coffee/i, /lunch/i, /new.?restaurant/i];
+  const seen = new Set<string>();
+  return [...articles]
+    .sort((a, b) => articleLocalScore(b, preferred) - articleLocalScore(a, preferred))
+    .filter((article) => {
+      const key = article.slug || normalizeEventIdentity(article.title);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function articleLocalScore(article: AtxArticle, preferred: RegExp[]) {
+  const text = `${article.title} ${article.tags?.join(" ") ?? ""}`;
+  return preferred.reduce((score, pattern, index) => score + (pattern.test(text) ? 100 - index * 4 : 0), 0) + Math.min(40, article.place_count ?? 0);
+}
+
+function exploreEventKey(event: EventItem) {
+  const start = new Date(event.startDateTime);
+  const timeBucket = Number.isFinite(start.getTime())
+    ? `${localDateKey(start)}-${String(start.getHours()).padStart(2, "0")}`
+    : `${event.date}-${event.timeText}`;
+  return `${normalizeEventIdentity(event.title)}|${normalizeEventIdentity(event.venueName)}|${timeBucket}`;
+}
+
+function normalizeEventIdentity(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/\b(the|a|an)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function eventWeekKey(event: EventItem) {
+  const start = new Date(event.startDateTime);
+  if (!Number.isFinite(start.getTime())) return event.date || "unknown";
+  const weekStart = new Date(start);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(start.getDate() - start.getDay());
+  return localDateKey(weekStart);
+}
+
 function weatherMatchedEvents(events: EventItem[], weather: WeatherState | null) {
   if (!weather) return events.slice(0, 5);
   const outdoor = isPatioWeather(weather);
@@ -2054,6 +3869,139 @@ function weatherLabel(code: number) {
   return "mild";
 }
 
+function PlaceDetailDrawer({
+  place,
+  events,
+  listNames,
+  saved,
+  visited,
+  onClose,
+  onSave,
+  onVisit,
+  onAddToList,
+  onOpenDetails
+}: {
+  place?: UnifiedPlace | null;
+  events: EventItem[];
+  listNames: string[];
+  saved: boolean;
+  visited: boolean;
+  onClose: () => void;
+  onSave: (id: string) => void;
+  onVisit: (id: string) => void;
+  onAddToList: (listName: string, placeId: string) => void;
+  onOpenDetails: (event: EventItem) => void;
+}) {
+  return (
+    <AnimatePresence>
+      {place ? (
+        <motion.div
+          className="fixed inset-0 z-[82] bg-black/34 backdrop-blur-md"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        >
+          <motion.aside
+            className="absolute inset-x-0 bottom-0 max-h-[90vh] overflow-y-auto rounded-t-[2rem] border border-white/24 bg-emerald-950/92 text-bone shadow-[0_24px_90px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.22)] backdrop-blur-2xl md:inset-y-0 md:left-auto md:right-0 md:h-full md:max-h-none md:w-[560px] md:rounded-l-[2rem] md:rounded-tr-none"
+            initial={{ y: "100%", x: 0, scale: 0.96, filter: "blur(8px)" }}
+            animate={{ y: 0, x: 0, scale: 1, filter: "blur(0px)" }}
+            exit={{ y: "100%", x: 0, scale: 0.96, filter: "blur(8px)" }}
+            transition={{ duration: 0.34, ease: "easeOut" }}
+            onClick={(click) => click.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/16 bg-emerald-950/82 px-4 py-3 backdrop-blur-2xl">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-100">{placeKindLabel(place.kind)}</p>
+              <button className="grid h-10 w-10 place-items-center rounded-full bg-white/16 text-bone shadow-[inset_0_1px_0_rgba(255,255,255,0.24)] transition hover:bg-white/70 hover:text-ink" onClick={onClose} aria-label="Close place details">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="relative min-h-[280px] overflow-hidden rounded-[1.5rem]">
+                <SafeImage className="object-cover" src={place.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 100vw, 560px" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/86 via-black/34 to-transparent" />
+                <div className="media-copy absolute bottom-4 left-4 right-4">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-neon">{place.neighborhoodPersonality}</p>
+                  <h2 className="mt-2 text-4xl font-black leading-none tracking-[-0.04em]">{place.name}</h2>
+                </div>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <PlaceInfo label="Area" value={areaLabel(place.area)} />
+                <PlaceInfo label="Distance" value={formatDistance(place.distanceMiles) ?? "Austin"} />
+                <PlaceInfo label="Price" value={place.price ?? "Varies"} />
+                <PlaceInfo label="Proof" value={place.articleTitles.length ? `${place.articleTitles.length} guides` : `${place.upcomingCount} events`} />
+              </div>
+              <div className="mt-5 rounded-[1.25rem] border border-white/28 bg-white/18 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.34)] backdrop-blur-xl">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Why it belongs</p>
+                <p className="mt-2 text-sm leading-6 text-bone/70">{place.mustTry || place.notes || place.vibe}</p>
+              </div>
+              {place.articleTitles.length ? (
+                <div className="mt-5 rounded-[1.25rem] border border-white/24 bg-white/14 p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Editorial proof</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {place.articleTitles.slice(0, 4).map((title, index) => (
+                      place.articleUrls[index] ? (
+                        <a className="rounded-full bg-white/16 px-3 py-2 text-xs font-black text-bone/72 transition hover:bg-white/24" href={place.articleUrls[index]} target="_blank" rel="noreferrer" key={title}>
+                          {title}
+                        </a>
+                      ) : (
+                        <span className="rounded-full bg-white/16 px-3 py-2 text-xs font-black text-bone/72" key={title}>{title}</span>
+                      )
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {events.length ? (
+                <div className="mt-5 rounded-[1.25rem] border border-white/24 bg-white/14 p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Upcoming here</p>
+                  <div className="mt-3 grid gap-2">
+                    {events.map((event) => (
+                      <button className="rounded-2xl bg-white/12 px-3 py-3 text-left transition hover:bg-white/20" key={event.id} onClick={() => onOpenDetails(event)}>
+                        <span className="block text-sm font-black">{event.title}</span>
+                        <span className="mt-1 block text-xs font-bold text-bone/48">{dayLabel(event)} · {formatEventTime(event)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button className={cn("rounded-full px-4 py-3 text-sm font-black transition", saved ? "bg-neon text-emerald-950" : "bg-white/18 text-bone hover:bg-white/28")} onClick={() => onSave(place.id)}>
+                  {saved ? "Saved" : "Save"}
+                </button>
+                <button className={cn("rounded-full px-4 py-3 text-sm font-black transition", visited ? "bg-bone text-ink" : "bg-white/18 text-bone hover:bg-white/28")} onClick={() => onVisit(place.id)}>
+                  {visited ? "Visited" : "Mark visited"}
+                </button>
+                {listNames.slice(0, 3).map((name) => (
+                  <button className="rounded-full bg-white/18 px-4 py-3 text-sm font-black text-bone transition hover:bg-white/28" key={name} onClick={() => onAddToList(name, place.id)}>
+                    Add to {name}
+                  </button>
+                ))}
+                <a className="rounded-full bg-neon px-4 py-3 text-sm font-black text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)] transition hover:bg-[#35E56B]" href={place.mapUrl} target="_blank" rel="noreferrer">
+                  Directions
+                </a>
+                {place.websiteUrl ? (
+                  <a className="rounded-full bg-white/18 px-4 py-3 text-sm font-black text-bone transition hover:bg-white/28" href={place.websiteUrl} target="_blank" rel="noreferrer">
+                    Website
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          </motion.aside>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+function PlaceInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[1rem] border border-white/24 bg-white/16 px-3 py-3 backdrop-blur-xl">
+      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-bone/42">{label}</p>
+      <p className="mt-1 text-sm font-black text-bone">{value}</p>
+    </div>
+  );
+}
+
 function timeGreeting(date = new Date()) {
   const hour = date.getHours();
   if (hour < 5) return "Late night";
@@ -2066,7 +4014,7 @@ function timeGreeting(date = new Date()) {
 function EmptyPanel({ message = "Import the CSV and the night shows up here." }: { message?: string }) {
   return (
     <div className="glass-panel rounded-[1.5rem] p-8 text-center">
-      <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-bone text-ink"><Martini className="h-6 w-6" /></div>
+      <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-neon text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)]"><Martini className="h-6 w-6" /></div>
       <p className="mt-4 text-xl font-black tracking-[-0.02em]">{message}</p>
       <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-bone/50">Try widening the date, mood, or neighborhood. I’ll keep the good stuff close.</p>
     </div>
@@ -2074,8 +4022,8 @@ function EmptyPanel({ message = "Import the CSV and the night shows up here." }:
 }
 
 const viewMotion = {
-  initial: { opacity: 0, y: 16 },
+  initial: { opacity: 0, y: 4 },
   animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -12 },
-  transition: { duration: 0.42, ease: "easeOut" }
+  exit: { opacity: 0, y: -4 },
+  transition: { duration: 0.22, ease: "easeOut" }
 };

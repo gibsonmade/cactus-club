@@ -5,21 +5,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#110f0d",
-        bone: "#f8f0df",
-        mezcal: "#d76632",
-        cactus: "#255f45",
-        neon: "#d5ff5f",
-        violet: "#6e42ff",
-        night: "#080706"
+        ink: "#1D1D1F",
+        bone: "#F5F5F7",
+        mezcal: "#A3E635",
+        cactus: "#1F7A4D",
+        neon: "#30D158",
+        violet: "#6E5CFF",
+        night: "#111113"
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "Inter", "system-ui", "sans-serif"],
-        display: ["var(--font-display)", "Georgia", "serif"]
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "system-ui", "sans-serif"]
       },
       boxShadow: {
-        glow: "0 24px 80px rgba(215, 102, 50, 0.22)",
-        card: "0 18px 50px rgba(0, 0, 0, 0.32)"
+        glow: "0 24px 80px rgba(48, 209, 88, 0.24)",
+        card: "0 18px 60px rgba(0, 0, 0, 0.18)"
       }
     }
   },
