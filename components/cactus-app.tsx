@@ -44,12 +44,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EventDetailDrawer } from "@/components/event-detail-drawer";
 import { chooseForMove } from "@/lib/enrichment";
-import { enrichDistances, formatDistance, type UserLocation } from "@/lib/location";
+import { distanceMiles, enrichDistances, formatDistance, type UserLocation } from "@/lib/location";
 import { dayLabel, formatEventTime, isNextWeek, isThisWeekend, isToday, isTomorrow, isTonight, isUpcoming, isWithinDateRange, sortSoonest } from "@/lib/time";
 import type { Area, EventItem, EvergreenEventItem, MoveCompany, MoveEnergy, MoveIntent, MoveVibe, VenueItem, VibeTag } from "@/lib/types";
 import { publicPath } from "@/lib/public-path";
 import { cn, uniq } from "@/lib/utils";
-import { buildOutingRecommendations, buildUnifiedPlaces, placeMatchesQuery, tagToVibeTags, type AtxArticle, type AtxEatPlace, type OutingRecommendation, type UnifiedPlace } from "@/lib/unified";
+import { buildOutingRecommendations, buildUnifiedPlaces, tagToVibeTags, type AtxArticle, type AtxEatPlace, type OutingRecommendation, type UnifiedPlace } from "@/lib/unified";
 import type { AppData } from "@/lib/app-data";
 
 type Tab = "Today" | "Explore" | "Plan" | "Places";
@@ -134,6 +134,7 @@ type WeatherState = {
   code: number;
   precipitation: number;
   precipitationChance: number;
+  windSpeed: number;
   label: string;
 };
 
@@ -208,8 +209,8 @@ export function CactusApp({ initialTab = "Today", initialData }: { initialTab?: 
   const [hiddenEvents] = useStoredIds("hiddenEvents");
   const [preferredVibes, setPreferredVibes] = useStoredArray<VibeTag>("preferredVibes");
   const [preferredAreas, setPreferredAreas] = useStoredArray<Area>("preferredAreas");
-  const [userLocation, setUserLocation] = useState<UserLocation | undefined>(() => readStoredLocation());
-  const [locationLabel, setLocationLabel] = useState(() => readStoredLocationLabel());
+  const [userLocation, setUserLocation] = useState<UserLocation | undefined>(undefined);
+  const [locationLabel, setLocationLabel] = useState("Nearby");
   const [weather, setWeather] = useState<WeatherState | null>(null);
   const [detailEvent, setDetailEvent] = useState<EventItem | null>(null);
   const [detailPlace, setDetailPlace] = useState<UnifiedPlace | null>(null);
@@ -220,6 +221,11 @@ export function CactusApp({ initialTab = "Today", initialData }: { initialTab?: 
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    setUserLocation(readStoredLocation());
+    setLocationLabel(readStoredLocationLabel());
+  }, []);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -288,7 +294,7 @@ export function CactusApp({ initialTab = "Today", initialData }: { initialTab?: 
     const url = new URL("https://api.open-meteo.com/v1/forecast");
     url.searchParams.set("latitude", String(location.latitude));
     url.searchParams.set("longitude", String(location.longitude));
-    url.searchParams.set("current", "temperature_2m,weather_code,precipitation");
+    url.searchParams.set("current", "temperature_2m,weather_code,precipitation,wind_speed_10m");
     url.searchParams.set("hourly", "precipitation_probability");
     url.searchParams.set("temperature_unit", "fahrenheit");
     url.searchParams.set("timezone", "auto");
@@ -299,8 +305,9 @@ export function CactusApp({ initialTab = "Today", initialData }: { initialTab?: 
         const temperature = Math.round(payload?.current?.temperature_2m ?? 0);
         const code = Number(payload?.current?.weather_code ?? 0);
         const precipitation = Number(payload?.current?.precipitation ?? 0);
+        const windSpeed = Number(payload?.current?.wind_speed_10m ?? 0);
         const precipitationChance = Number(payload?.hourly?.precipitation_probability?.[0] ?? 0);
-        setWeather({ temperature, code, precipitation, precipitationChance, label: weatherLabel(code) });
+        setWeather({ temperature, code, precipitation, precipitationChance, windSpeed, label: weatherLabel(code) });
       })
       .catch(() => {
         if (active) setWeather(null);
@@ -552,7 +559,10 @@ export function CactusApp({ initialTab = "Today", initialData }: { initialTab?: 
 }
 
 function useStoredArray<T extends string>(key: string) {
-  const [items, setItems] = useState<T[]>(() => readStoredJsonValue<T[]>(key, []));
+  const [items, setItems] = useState<T[]>([]);
+  useEffect(() => {
+    setItems(readStoredJsonValue<T[]>(key, []));
+  }, [key]);
   const update = useCallback((next: T[] | ((current: T[]) => T[])) => {
     setItems((current) => {
       const resolved = typeof next === "function" ? next(current) : next;
@@ -568,7 +578,10 @@ function useStoredIds(key: string) {
 }
 
 function useStoredJson<T>(key: string, fallback: T) {
-  const [item, setItem] = useState<T>(() => readStoredJsonValue<T>(key, fallback));
+  const [item, setItem] = useState<T>(fallback);
+  useEffect(() => {
+    setItem(readStoredJsonValue<T>(key, fallback));
+  }, [key]);
   const update = useCallback((next: T | ((current: T) => T)) => {
     setItem((current) => {
       const resolved = typeof next === "function" ? (next as (current: T) => T)(current) : next;
@@ -734,21 +747,21 @@ function AmbientChrome({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <header className="glass-panel sticky top-3 z-50 mb-5 flex min-h-[66px] items-center gap-3 rounded-full px-3 py-2 md:top-4 md:mb-7">
-        <Link className="flex min-h-11 shrink-0 items-center gap-2 rounded-full px-3 text-neon transition hover:bg-white/12" href="/today">
+    <header className="glass-panel sticky top-3 z-50 mx-auto mb-4 flex min-h-[58px] w-full max-w-[calc(100vw-2rem)] items-center gap-2 rounded-[1.45rem] px-3 py-2 sm:max-w-full md:top-4 md:mb-6 md:min-h-[62px] md:px-4">
+        <Link className="flex min-h-10 shrink-0 items-center gap-2 rounded-full px-2.5 text-neon transition hover:bg-white/10 active:scale-[0.96]" href="/today">
           <Utensils className="h-5 w-5" />
-          <p className="hidden text-lg font-black tracking-[-0.02em] sm:block">Cactus Club</p>
+          <p className="hidden text-base font-black sm:block">Cactus Club</p>
         </Link>
 
-        <nav className="hidden flex-1 items-center justify-end gap-1 overflow-x-auto md:flex">
+        <nav className="hidden flex-1 items-center justify-end gap-1.5 overflow-x-auto md:flex">
           {tabs.map((tab) => {
             const active = activeTab === tab.id;
             const isPlan = tab.id === "Plan";
             return (
               <Link
                 className={cn(
-                  "relative inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-black transition",
-                  active ? "bg-white/76 text-ink shadow-[0_10px_32px_rgba(48,209,88,0.18)]" : "text-emerald-950 hover:bg-white/56"
+                  "relative inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-black transition-transform transition-colors active:scale-[0.96]",
+                  active ? "bg-white/54 text-ink shadow-[0_8px_22px_rgba(6,47,34,0.10)]" : "text-emerald-950/78 hover:bg-white/36 hover:text-emerald-950"
                 )}
                 href={tab.href}
                 key={tab.id}
@@ -766,14 +779,14 @@ function AmbientChrome({
           })}
         </nav>
 
-        <div className="relative ml-auto shrink-0 md:ml-0">
+        <div className="relative ml-auto shrink-0 md:ml-1">
           <button
-            className="inline-flex max-w-[46vw] items-center gap-2 rounded-full border border-white/60 bg-white/78 px-3 py-2 text-xs font-black text-emerald-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-xl transition hover:bg-white md:max-w-none"
+            className="inline-flex min-h-10 max-w-[46vw] items-center gap-2 rounded-full border border-white/48 bg-white/48 px-3 py-2 text-xs font-black text-emerald-950/82 shadow-[inset_0_1px_0_rgba(255,255,255,0.58)] backdrop-blur-xl transition-transform transition-colors hover:bg-white/68 active:scale-[0.96] md:max-w-none"
             onClick={() => setOpen(!open)}
             aria-expanded={open}
           >
             <LocateFixed className="h-4 w-4 shrink-0 text-emerald-100" />
-            <span className="truncate">{locationEnabled ? locationLabel : "Nearby"}</span>
+            <span className="hidden truncate sm:inline">{locationEnabled ? locationLabel : "Nearby"}</span>
             <ChevronDown className={cn("h-4 w-4 shrink-0 transition", open && "rotate-180")} />
           </button>
           <AnimatePresence>
@@ -859,18 +872,8 @@ function UpcomingView({
   const fallbackUpcomingEvents = useMemo(() => dedupeHomepageEvents(ranked.filter((event) => !rightNowEvents.some((item) => item.id === event.id))).slice(0, 8), [ranked, rightNowEvents]);
   const spotlightEvents = rightNowEvents.length ? rightNowEvents : fallbackUpcomingEvents;
   const hero = spotlightEvents[0];
-  const foodAddOns = useMemo(
-    () =>
-      places
-        .filter((place) => place.kind === "restaurant" || place.kind === "bar")
-        .sort((a, b) => {
-          const areaBoostA = hero && a.area === hero.area ? 40 : 0;
-          const areaBoostB = hero && b.area === hero.area ? 40 : 0;
-          return areaBoostB + b.popularityScore - (areaBoostA + a.popularityScore) || (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99);
-        })
-        .slice(0, 10),
-    [hero, places]
-  );
+  const todayEventCount = useMemo(() => events.filter((event) => isToday(event)).length, [events]);
+  const planAroundPlaces = useMemo(() => selectPlanAroundPlaces(hero, places), [hero, places]);
   const restaurants = useMemo(() => places.filter((place) => place.kind === "restaurant"), [places]);
   const nearbyContextPlaces = useMemo(
     () =>
@@ -900,21 +903,20 @@ function UpcomingView({
     <motion.section {...viewMotion} className="landing-page space-y-14 md:space-y-20">
       <RightNowHero
         events={spotlightEvents}
-        eventCount={events.length}
-        savedCount={savedEvents.length + savedVenues.length + savedPlaces.length}
+        todayEventCount={todayEventCount}
         weather={weather}
         savedEvents={savedEvents}
         onSaveEvent={onSave}
         onOpenDetails={onOpenDetails}
       />
       <TonightEventStrip events={spotlightEvents} savedEvents={savedEvents} onSaveEvent={onSave} onOpenDetails={onOpenDetails} />
-      <PlanAroundThis event={hero} places={foodAddOns} savedPlaces={savedPlaces} onSavePlace={onSavePlace} onOpenPlace={onOpenPlace} onOpenDetails={onOpenDetails} />
+      <PlanAroundThis event={hero} places={planAroundPlaces} savedPlaces={savedPlaces} onSavePlace={onSavePlace} onOpenPlace={onOpenPlace} onOpenDetails={onOpenDetails} />
       <CategoryCarousel events={events} places={places} />
       <PopularGrid places={balancedPopularPlaces} events={spotlightEvents} savedPlaces={savedPlaces} savedEvents={savedEvents} onSavePlace={onSavePlace} onSaveEvent={onSave} onOpenPlace={onOpenPlace} onOpenDetails={onOpenDetails} />
       <NearbyContextStrip places={nearbyContextPlaces} savedPlaces={savedPlaces} onSavePlace={onSavePlace} onOpenPlace={onOpenPlace} />
       <BeforeAfterSection places={beforeAfterPlaces} savedPlaces={savedPlaces} onSavePlace={onSavePlace} onOpenPlace={onOpenPlace} />
       <GradientCtaBanner />
-      <FeaturePanel places={foodAddOns} event={hero} onOpenPlace={onOpenPlace} onOpenDetails={onOpenDetails} />
+      <FeaturePanel places={planAroundPlaces} event={hero} onOpenPlace={onOpenPlace} onOpenDetails={onOpenDetails} />
       <EditorialCards articles={articleCards} places={balancedPopularPlaces} />
       <LandingFooter />
     </motion.section>
@@ -933,18 +935,74 @@ function NarrativeChapter({ eyebrow, title, copy }: { eyebrow: string; title: st
   );
 }
 
+function forecastLine(weather: WeatherState | null, now = new Date()) {
+  if (!weather) return "Forecast loading.";
+  const hour = now.getHours();
+  const timeOfDay = hour < 11 ? "morning" : hour < 17 ? "afternoon" : "evening";
+  const condition = weather.label === "clear" ? "sunny" : weather.label;
+  const intro = `Today's forecast is ${weather.temperature}° and ${condition}.`;
+  const rainy = weather.precipitationChance >= 65 || (weather.code >= 61 && weather.code <= 67) || (weather.code >= 80 && weather.code <= 82);
+  const lightRain = weather.precipitationChance >= 35 || (weather.code >= 51 && weather.code <= 57);
+  const stormy = weather.code >= 95;
+  const windy = weather.windSpeed >= 18;
+  const cloudy = [2, 3, 45, 48].includes(weather.code);
+
+  if (stormy) return `${intro} Probably an indoor day.`;
+  if (rainy) return `${intro} Alamo Draft House kind of day.`;
+  if (lightRain) return `${intro} Maybe rain, maybe not.`;
+  if (windy) return `${intro} Patio or Barton?`;
+  if (cloudy) return `${intro} Chill day, enjoy.`;
+  if (weather.temperature >= 90 && timeOfDay === "afternoon") return `${intro} Perfect for Barton Springs.`;
+  if (weather.temperature >= 90 && timeOfDay === "evening") return `${intro} Patios weather.`;
+  if (weather.temperature < 58 && timeOfDay === "morning") return `${intro} Coffee sounds nice.`;
+  if (weather.temperature < 58 && timeOfDay === "evening") return `${intro} Indoor concerts?`;
+  if (weather.temperature >= 58 && weather.temperature <= 82 && timeOfDay === "morning") return `${intro} Coffee, walk, chill.`;
+  if (weather.temperature >= 58 && weather.temperature <= 88) return `${intro} Zilker or patio?`;
+  return `${intro} Pick another a spot, keep it chill.`;
+}
+
+function selectPlanAroundPlaces(event: EventItem | undefined, places: UnifiedPlace[]) {
+  const candidates = places.filter((place) => place.kind === "restaurant" || place.kind === "bar");
+  if (!event) return candidates.sort((a, b) => b.popularityScore - a.popularityScore).slice(0, 10);
+
+  const eventPlace = places.find((place) => place.source === "cactus" && place.sourceId === event.venueId) ?? places.find((place) => place.upcomingEventIds.includes(event.id));
+  const origin = eventPlace?.latitude && eventPlace.longitude ? { latitude: eventPlace.latitude, longitude: eventPlace.longitude } : undefined;
+  const scored = candidates.map((place) => {
+    const sameArea = place.area === event.area;
+    const maybeOpen = isOpenLikely(place);
+    const distanceFromEvent =
+      origin && place.latitude && place.longitude ? distanceMiles(origin, { latitude: place.latitude, longitude: place.longitude }) : undefined;
+    const score =
+      (maybeOpen ? 1000 : 0) +
+      (sameArea ? 320 : 0) +
+      (typeof distanceFromEvent === "number" ? Math.max(0, 260 - distanceFromEvent * 80) : 0) +
+      place.popularityScore;
+    return { place, distanceFromEvent, score };
+  });
+
+  return scored
+    .sort((a, b) => b.score - a.score || (a.distanceFromEvent ?? 99) - (b.distanceFromEvent ?? 99))
+    .map((item) => item.place)
+    .slice(0, 10);
+}
+
+function isOpenLikely(place: UnifiedPlace) {
+  const text = `${place.hours ?? ""} ${place.openFor ?? ""}`.toLowerCase();
+  if (/temporarily closed|permanently closed|closed now/.test(text)) return false;
+  if (/late|night|dinner|happy hour|lunch|brunch|breakfast|coffee|open/.test(text)) return true;
+  return Boolean(place.hours || place.openFor);
+}
+
 function RightNowHero({
   events,
-  eventCount,
-  savedCount,
+  todayEventCount,
   weather,
   savedEvents,
   onSaveEvent,
   onOpenDetails,
 }: {
   events: EventItem[];
-  eventCount: number;
-  savedCount: number;
+  todayEventCount: number;
   weather: WeatherState | null;
   savedEvents: string[];
   onSaveEvent: (id: string) => void;
@@ -959,45 +1017,43 @@ function RightNowHero({
     { label: "Date night", href: "/explore?vibe=Date+Night" }
   ];
   return (
-    <section className="landing-hero relative overflow-hidden rounded-[2rem] p-4 md:p-8">
-      <div className="pointer-events-none absolute inset-0 z-0 opacity-80 [background-image:radial-gradient(circle_at_12%_18%,rgba(255,255,255,0.62),transparent_16rem),radial-gradient(circle_at_82%_12%,rgba(48,209,88,0.32),transparent_18rem),linear-gradient(135deg,rgba(255,255,255,0.30),rgba(255,255,255,0.06))]" />
-      <div className="pointer-events-none absolute right-8 top-8 hidden h-24 w-24 rounded-[2rem] border border-white/20 bg-white/12 rotate-12 backdrop-blur md:block" />
-      <div className="relative z-10 grid gap-7 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)] lg:items-center">
-        <div className="py-2 md:py-7">
-          <div className="mb-5 flex flex-wrap items-center gap-2">
-            <LandingPillButton href="/explore?date=Nearby" icon={MapPin}>Austin, nearby</LandingPillButton>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/58 px-3 py-2 text-xs font-black text-ink shadow-soft backdrop-blur-xl">
-              <Heart className="h-4 w-4 text-neon" /> {savedCount} saved
-            </span>
-            <span className="inline-flex min-w-[118px] items-center gap-2 rounded-full bg-white/44 px-3 py-2 text-xs font-black text-ink/70 shadow-soft backdrop-blur-xl">
-              <CloudSun className="h-4 w-4 text-cactus" /> {weather ? `${weather.temperature}° ${weather.label}` : "Weather"}
-            </span>
+    <section className="landing-hero relative mx-auto w-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-[1.45rem] p-4 sm:max-w-full md:p-6 lg:p-8">
+      <div className="pointer-events-none absolute inset-0 z-0 opacity-70 [background-image:radial-gradient(circle_at_14%_18%,rgba(255,255,255,0.60),transparent_15rem),radial-gradient(circle_at_82%_20%,rgba(48,209,88,0.22),transparent_17rem),linear-gradient(135deg,rgba(255,255,255,0.22),rgba(255,255,255,0.04))]" />
+      <div className="relative z-10 grid min-w-0 gap-8 lg:grid-cols-[minmax(0,0.98fr)_minmax(420px,0.9fr)] lg:items-center">
+        <div className="min-w-0 py-1 md:py-4 lg:py-5">
+          <div className="mb-4 flex w-full max-w-full items-start gap-2 rounded-[1.15rem] border border-emerald-950/12 bg-[#f7fff3]/95 px-3 py-2 text-[11px] font-black leading-4 text-[#062f22] shadow-[0_10px_28px_rgba(9,32,20,0.10),inset_0_1px_0_rgba(255,255,255,0.82)] backdrop-blur-xl sm:max-w-xl sm:text-sm sm:leading-6">
+            <CloudSun className="mt-0.5 h-4 w-4 shrink-0 text-[#1f7a4d]" />
+            <p className="min-w-0 whitespace-normal text-pretty">{forecastLine(weather)}</p>
           </div>
-          <p className="inline-flex rounded-full bg-white/88 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-emerald-950 shadow-soft">Events, food, bars, and places</p>
-          <h1 className="mt-3 max-w-2xl font-display text-[3.35rem] font-black leading-[0.92] tracking-[-0.055em] text-emerald-950 md:text-[5.4rem]">
-            Find the move in Austin right now.
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-cactus">Your ultimate ATX guide</p>
+          <h1 className="mt-3 max-w-full text-balance font-display text-[2.75rem] font-black leading-[0.94] text-emerald-950 sm:max-w-[12ch] sm:text-[4.2rem] md:text-[5rem] lg:text-[5.15rem]">
+            Go explore Austin today.
           </h1>
           <LandingSearchBox />
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {chips.map((chip) => (
-              <Link className="rounded-full border border-emerald-950/10 bg-white/88 px-3 py-2 text-xs font-black text-emerald-950 shadow-soft transition hover:-translate-y-0.5 hover:bg-white" href={chip.href} key={chip.label}>
+              <Link className="inline-flex min-h-9 items-center rounded-full border border-emerald-950/10 bg-white/74 px-3 text-xs font-black text-[#062f22] shadow-[inset_0_1px_0_rgba(255,255,255,0.62)] transition-transform transition-colors hover:-translate-y-0.5 hover:bg-white active:scale-[0.96]" href={chip.href} key={chip.label}>
                 {chip.label}
               </Link>
             ))}
           </div>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="inline-flex items-center gap-2 rounded-full bg-emerald-950 px-5 py-3 text-sm font-black text-white shadow-[0_18px_40px_rgba(6,47,34,0.28)] transition hover:-translate-y-0.5" href="/explore?date=Today">
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link className="inline-flex min-h-12 items-center gap-2 rounded-full bg-emerald-950 px-5 text-sm font-black text-white shadow-[0_16px_34px_rgba(6,47,34,0.24)] transition-transform hover:-translate-y-0.5 active:scale-[0.96]" href="/explore?date=Today">
               See what&apos;s on tonight <ArrowRight className="h-4 w-4" />
             </Link>
-            <Link className="inline-flex items-center gap-2 rounded-full border border-emerald-950/10 bg-white/52 px-5 py-3 text-sm font-black text-emerald-950 shadow-soft transition hover:-translate-y-0.5 hover:bg-white" href="/plan">
+            <Link className="inline-flex min-h-12 items-center gap-2 rounded-full border border-emerald-950/10 bg-white/38 px-5 text-sm font-black text-emerald-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.58)] transition-transform transition-colors hover:-translate-y-0.5 hover:bg-white/64 active:scale-[0.96]" href="/plan">
               Build a plan
             </Link>
           </div>
         </div>
-        <div className="relative min-h-[430px]">
+        <div className="relative grid min-w-0 gap-4 lg:min-h-[440px] lg:content-center">
+          <div className="inline-flex w-fit items-center gap-2 justify-self-start rounded-full bg-white/76 px-3 py-2 text-xs font-black text-emerald-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.68)] backdrop-blur-xl">
+            <span className="text-emerald-950/72">Events today</span>
+            <span className="shrink-0 tabular-nums text-emerald-950">{todayEventCount.toLocaleString("en-US")}</span>
+          </div>
           {event ? (
-            <article className="glass-card glass-card-hover absolute left-0 top-6 w-[78%] rounded-[2rem] p-3 text-ink">
-              <div className="relative h-64 overflow-hidden rounded-[1.55rem]">
+            <article className="glass-card glass-card-hover relative w-full max-w-full rounded-[1.6rem] p-3 text-ink lg:w-[86%]">
+              <div className="relative h-56 overflow-hidden rounded-[1.2rem] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.10)] sm:h-64">
                 <SafeImage className="object-cover" src={event.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="420px" />
                 <FavoriteButton active={savedEvents.includes(event.id)} onClick={() => onSaveEvent(event.id)} className="absolute right-3 top-3" />
               </div>
@@ -1011,21 +1067,18 @@ function RightNowHero({
             </article>
           ) : null}
           {secondaryEvent ? (
-            <article className="glass-card glass-card-hover absolute bottom-8 right-0 w-[56%] rounded-[1.65rem] p-3 text-left text-ink">
-              <div className="relative h-32 overflow-hidden rounded-[1.25rem]">
+            <article className="glass-card glass-card-hover relative w-full max-w-full rounded-[1.35rem] p-3 text-left text-ink sm:grid sm:grid-cols-[150px_1fr] sm:items-center sm:gap-3 xl:absolute xl:bottom-4 xl:right-0 xl:w-[58%] xl:grid-cols-1 xl:gap-0">
+              <div className="relative h-32 overflow-hidden rounded-[1rem] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.10)] sm:h-28 lg:h-32">
                 <button className="absolute inset-0 z-10" onClick={() => onOpenDetails(secondaryEvent)} aria-label={`Open ${secondaryEvent.title}`} />
                 <SafeImage className="object-cover" src={secondaryEvent.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="260px" />
                 <FavoriteButton active={savedEvents.includes(secondaryEvent.id)} onClick={() => onSaveEvent(secondaryEvent.id)} className="absolute right-2 top-2 z-20" />
               </div>
               <button className="w-full text-left" onClick={() => onOpenDetails(secondaryEvent)}>
-                <p className="mt-3 text-xs font-black uppercase tracking-[0.14em] text-emerald-700">{isTonight(secondaryEvent) ? "Also tonight" : dayLabel(secondaryEvent)}</p>
+                <p className="mt-3 text-xs font-black uppercase tracking-[0.14em] text-emerald-700 sm:mt-0 xl:mt-3">{isTonight(secondaryEvent) ? "Also tonight" : dayLabel(secondaryEvent)}</p>
                 <h3 className="mt-1 line-clamp-2 text-lg font-black leading-tight">{secondaryEvent.title}</h3>
               </button>
             </article>
           ) : null}
-          <div className="absolute right-8 top-0 rounded-full bg-neon px-4 py-3 text-xs font-black text-emerald-950 shadow-[0_18px_40px_rgba(48,209,88,0.35)]">
-            {eventCount.toLocaleString("en-US")} events
-          </div>
         </div>
       </div>
     </section>
@@ -1034,12 +1087,12 @@ function RightNowHero({
 
 function LandingSearchBox() {
   return (
-    <form className="mt-7 flex max-w-2xl items-center gap-2 rounded-full border border-emerald-950/8 bg-white/78 p-2 shadow-[0_18px_50px_rgba(9,17,13,0.12)] backdrop-blur-xl" action="/explore">
-      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-50 text-cactus">
+    <form className="mt-5 flex w-full max-w-full items-center gap-2 rounded-full border border-emerald-950/8 bg-white/72 p-2 shadow-[0_14px_38px_rgba(9,17,13,0.10)] backdrop-blur-xl sm:max-w-2xl" action="/explore">
+      <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-50 text-cactus transition-transform active:scale-[0.96]" type="submit" aria-label="Search">
         <Search className="h-5 w-5" />
-      </div>
+      </button>
       <input className="min-w-0 flex-1 bg-transparent text-sm font-bold text-emerald-950 outline-none placeholder:text-emerald-950/38" name="q" placeholder="Search live music, comedy, food, patios..." />
-      <button className="shrink-0 rounded-full bg-neon px-5 py-3 text-sm font-black text-emerald-950 shadow-[0_12px_30px_rgba(48,209,88,0.30)] transition hover:-translate-y-0.5" type="submit">
+      <button className="hidden min-h-10 shrink-0 rounded-full bg-neon px-5 text-sm font-black text-emerald-950 shadow-[0_10px_24px_rgba(48,209,88,0.26)] transition-transform hover:-translate-y-0.5 active:scale-[0.96] sm:block" type="submit">
         Search
       </button>
     </form>
@@ -1059,16 +1112,15 @@ function TonightEventStrip({ events, savedEvents, onSaveEvent, onOpenDetails }: 
   if (!events.length) return null;
   return (
     <section>
-      <LandingSectionHeader eyebrow="Right now" title="Tonight has a shape already." actionHref="/explore?date=Today" action="View tonight" centered />
+      <LandingSectionHeader eyebrow="Popular today" title="Here's what's happening today." />
       <div>
-        <FullBleedRail>
+        <FullBleedRail snap={false}>
           {events.map((event) => (
-            <div className="w-[78vw] shrink-0 snap-start sm:w-[340px]" key={event.id}>
+            <div className="w-[78vw] shrink-0 sm:w-[340px]" key={event.id}>
               <EventPromoCard event={event} saved={savedEvents.includes(event.id)} onFavorite={onSaveEvent} onOpen={onOpenDetails} />
             </div>
           ))}
         </FullBleedRail>
-        <div className="mt-4 flex justify-end"><CarouselArrowButton href="/explore?date=Today" /></div>
       </div>
     </section>
   );
@@ -1103,7 +1155,7 @@ function NearbyContextStrip({ places, savedPlaces, onSavePlace, onOpenPlace }: {
   if (!places.length) return null;
   return (
     <section>
-      <LandingSectionHeader eyebrow="Before, after, or nearby" title="Food, bars, rooms, and easy stops." actionHref="/places" action="View places" centered />
+      <LandingSectionHeader eyebrow="Before, after, or nearby" title="Food, bars, rooms, and easy stops." />
       <div>
         <FullBleedRail>
           {places.map((place, index) => (
@@ -1112,7 +1164,6 @@ function NearbyContextStrip({ places, savedPlaces, onSavePlace, onOpenPlace }: {
             </div>
           ))}
         </FullBleedRail>
-        <div className="mt-4 flex justify-end"><CarouselArrowButton href="/places" /></div>
       </div>
     </section>
   );
@@ -1154,23 +1205,21 @@ function CategoryCarousel({ events, places }: { events: EventItem[]; places: Uni
   ];
   return (
     <section>
-      <LandingSectionHeader eyebrow="Categories" title="Browse the easiest lanes." actionHref="/explore" action="Explore all" centered />
-      <div className="full-bleed-rail-safe">
-        <div className="flex gap-3 overflow-x-auto px-1 py-3 hide-scrollbar">
-          {items.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link className="category-tile group min-w-[136px] rounded-[1.5rem] p-4 text-center text-ink glass-card" href={item.href} key={item.label}>
-                <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-50 text-cactus transition duration-300 ease-out group-hover:bg-neon group-hover:text-emerald-950">
-                  <Icon className="h-5 w-5" />
-                </div>
-                <p className="mt-3 text-sm font-black">{item.label}</p>
-                <p className="mt-1 text-[11px] font-black uppercase tracking-[0.12em] text-ink/62">{item.count.toLocaleString("en-US")}</p>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
+      <LandingSectionHeader eyebrow="Categories" title="Browse by your energy." />
+      <FullBleedRail snap={false}>
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link className="category-tile group min-w-[136px] rounded-[1.5rem] p-4 text-center text-ink glass-card" href={item.href} key={item.label}>
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-50 text-cactus transition duration-300 ease-out group-hover:bg-neon group-hover:text-emerald-950">
+                <Icon className="h-5 w-5" />
+              </div>
+              <p className="mt-3 text-sm font-black">{item.label}</p>
+              <p className="mt-1 text-[11px] font-black uppercase tracking-[0.12em] text-ink/62">{item.count.toLocaleString("en-US")}</p>
+            </Link>
+          );
+        })}
+      </FullBleedRail>
     </section>
   );
 }
@@ -1196,7 +1245,7 @@ function PopularGrid({
 }) {
   return (
     <section>
-      <LandingSectionHeader eyebrow="Popular" title="What Austin keeps choosing tonight." actionHref="/explore?vibe=Popular" action="View popular" />
+      <LandingSectionHeader eyebrow="Popular" title="What Austin keeps choosing tonight." />
       {events.length ? (
         <div className="grid gap-4 md:grid-cols-3">
           {events.slice(0, 3).map((event) => (
@@ -1217,7 +1266,7 @@ function BeforeAfterSection({ places, savedPlaces, onSavePlace, onOpenPlace }: {
   if (!places.length) return null;
   return (
     <section>
-      <LandingSectionHeader eyebrow="Before + after" title="Easy food moves around the main event." actionHref="/places" action="Browse food" />
+      <LandingSectionHeader eyebrow="Before + after" title="Easy food moves around the main event." />
       <div className="grid gap-4 lg:grid-cols-2">
         {places.slice(0, 4).map((place, index) => (
           <article className="landing-card glass-card glass-card-hover grid gap-3 rounded-[1.75rem] p-3 text-ink md:grid-cols-[160px_1fr]" key={place.id}>
@@ -1268,7 +1317,7 @@ function HowItWorks() {
   ];
   return (
     <section>
-      <LandingSectionHeader eyebrow="How it works" title="Three steps, no overthinking." centered />
+      <LandingSectionHeader eyebrow="How it works" title="Three steps, no overthinking." />
       <div className="grid gap-4 md:grid-cols-3">
         {steps.map((step, index) => {
           const Icon = step.icon;
@@ -1326,7 +1375,7 @@ function EditorialCards({ articles, places }: { articles: AtxArticle[]; places: 
   if (!articles.length) return null;
   return (
     <section>
-      <LandingSectionHeader eyebrow="Austin guides" title="Keep a few ideas for later." actionHref="/explore" action="Read more" />
+      <LandingSectionHeader eyebrow="Austin guides" title="Keep a few ideas for later." tone="light" />
       <div className="grid gap-4 md:grid-cols-3">
         {articles.map((article, index) => {
           const place = places[index % Math.max(places.length, 1)];
@@ -1335,7 +1384,7 @@ function EditorialCards({ articles, places }: { articles: AtxArticle[]; places: 
               <div className="relative h-44 overflow-hidden rounded-[1.25rem]">
                 <SafeImage className="object-cover" src={place?.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="360px" />
               </div>
-              <div className="p-4">
+              <div className="p-2">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-cactus">{article.tags?.[0] ?? "Guide"}</p>
                 <h3 className="mt-2 line-clamp-2 text-xl font-black leading-tight">{article.title}</h3>
                 <p className="mt-3 text-sm font-semibold leading-6 text-ink/66">{article.place_count ?? "Local"} places to keep in your Austin rotation.</p>
@@ -1375,18 +1424,13 @@ function FooterLinks({ title, links }: { title: string; links: Array<[string, st
   );
 }
 
-function LandingSectionHeader({ eyebrow, title, actionHref, action, centered = false }: { eyebrow: string; title: string; actionHref?: string; action?: string; centered?: boolean }) {
+function LandingSectionHeader({ eyebrow, title, tone = "dark" }: { eyebrow: string; title: string; actionHref?: string; action?: string; centered?: boolean; tone?: "dark" | "light" }) {
   return (
-    <div className={cn("mb-5 flex gap-4", centered ? "flex-col items-center text-center" : "items-end justify-between")}>
+    <div className="mb-5 flex items-end justify-between gap-4 text-left">
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-950/68">{eyebrow}</p>
-        <h2 className="mt-2 text-3xl font-black leading-none tracking-[-0.035em] text-emerald-950 md:text-5xl">{title}</h2>
+        <p className={cn("text-xs font-black uppercase tracking-[0.18em]", tone === "light" ? "text-white/70" : "text-emerald-950/68")}>{eyebrow}</p>
+        <h2 className={cn("mt-2 text-3xl font-black leading-none tracking-[-0.035em] md:text-5xl", tone === "light" ? "text-white" : "text-emerald-950")}>{title}</h2>
       </div>
-      {actionHref && action ? (
-        <Link className="shrink-0 rounded-full border border-emerald-950/12 bg-white/58 px-4 py-2 text-xs font-black text-emerald-950 shadow-soft transition hover:bg-white" href={actionHref}>
-          {action}
-        </Link>
-      ) : null}
     </div>
   );
 }
@@ -1446,14 +1490,6 @@ function RatingMeta({ place }: { place: UnifiedPlace }) {
       <span>•</span>
       <span>{place.area === "Burbs" ? "Suburbs" : place.area}</span>
     </div>
-  );
-}
-
-function CarouselArrowButton({ href }: { href: string }) {
-  return (
-    <Link className="hidden h-12 w-12 place-items-center rounded-full bg-white/72 text-ink shadow-[0_18px_44px_rgba(9,17,13,0.18)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white md:grid" href={href} aria-label="View more">
-      <ArrowRight className="h-5 w-5" />
-    </Link>
   );
 }
 
@@ -1524,10 +1560,10 @@ function NarrativeSkeleton() {
   );
 }
 
-function FullBleedRail({ children }: { children: React.ReactNode }) {
+function FullBleedRail({ children, snap = true }: { children: React.ReactNode; snap?: boolean }) {
   return (
     <div className="container-bleed-rail relative overflow-visible">
-      <div className="flex snap-x gap-3 overflow-x-auto px-1 py-3 hide-scrollbar">
+      <div className={cn("flex gap-3 overflow-x-auto px-1 py-3 hide-scrollbar", snap && "snap-x")}>
         {children}
       </div>
     </div>
@@ -2126,41 +2162,33 @@ type ExploreGuideCard = {
   tone: "lime" | "orange" | "blue";
 };
 
+type GeneratedExploreArticle = {
+  id: string;
+  label: string;
+  title: string;
+  copy: string;
+  anchor: EventItem;
+  foodAndDrink: UnifiedPlace[];
+  evergreenPlaces: UnifiedPlace[];
+  tone: "lime" | "orange" | "blue";
+};
+
 function ExploreGuidesFrontPage({
-  articles,
   events,
   places,
-  calendarMonth,
-  dateMode,
-  endDate,
-  locationEnabled,
-  onMonthChange,
-  onPickDate,
-  onQuickPick,
-  startDate,
   onOpenDetails,
   onOpenPlace
 }: {
-  articles: AtxArticle[];
   events: EventItem[];
   places: UnifiedPlace[];
-  calendarMonth: Date;
-  dateMode: "Any" | "Today" | "Tomorrow" | "Weekend" | "Range" | "Nearby";
-  endDate: string;
-  locationEnabled: boolean;
-  onMonthChange: (date: Date) => void;
-  onPickDate: (value: string) => void;
-  onQuickPick: (mode: "Any" | "Today" | "Tomorrow" | "Weekend" | "Range" | "Nearby") => void;
-  startDate: string;
   onOpenDetails: (event: EventItem) => void;
   onOpenPlace: (place: UnifiedPlace) => void;
 }) {
   const allocation = useMemo(() => allocateExploreEvents(events, places), [events, places]);
-  const localArticles = useMemo(() => curateLocalArticles(articles).slice(0, 4), [articles]);
+  const generatedArticles = useMemo(() => generateExplorePlanArticles(events, places), [events, places]);
   const guideCards = allocation.guideCards;
   const heroGuide = guideCards[0];
   const supportingGuides = guideCards.slice(1, 6);
-  const sidebarPick = allocation.sidebarPlace ?? heroGuide?.addOns[0] ?? places[0];
 
   if (!heroGuide && !places.length) return null;
 
@@ -2180,71 +2208,36 @@ function ExploreGuidesFrontPage({
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="min-w-0 space-y-5">
-          {heroGuide ? <ExploreGuideHeroCard guide={heroGuide} onOpenDetails={onOpenDetails} onOpenPlace={onOpenPlace} /> : null}
+      <div className="min-w-0 space-y-5">
+        {heroGuide ? <ExploreGuideHeroCard guide={heroGuide} onOpenDetails={onOpenDetails} onOpenPlace={onOpenPlace} /> : null}
 
-          <section className="grid min-w-0 gap-4 md:grid-cols-2">
-            {supportingGuides.map((guide) => (
-              <ExploreGuideCardView guide={guide} key={guide.id} onOpenDetails={onOpenDetails} onOpenPlace={onOpenPlace} />
-            ))}
-          </section>
+        <section className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {supportingGuides.map((guide) => (
+            <ExploreGuideCardView guide={guide} key={guide.id} onOpenDetails={onOpenDetails} onOpenPlace={onOpenPlace} />
+          ))}
+        </section>
 
-          {localArticles.length ? (
-            <section className="glass-card rounded-[1.75rem] p-4 text-ink">
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-cactus">Austin local guides</p>
-                  <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.035em] md:text-3xl">Keep these local rotations handy.</h2>
-                </div>
-                <Link className="rounded-full border border-emerald-950/10 bg-white/58 px-4 py-2 text-xs font-black text-emerald-950 shadow-soft transition hover:bg-white" href="/places">
-                  Browse places
-                </Link>
+        {generatedArticles.length ? (
+          <section className="glass-card rounded-[1.75rem] p-4 text-ink">
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-cactus">Austin plan guides</p>
+                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.035em] md:text-3xl">Start with the thing, then walk somewhere good.</h2>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {localArticles.map((article, index) => (
-                  <LocalGuideArticleCard article={article} place={places[index % Math.max(places.length, 1)]} key={article.slug} />
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          <section className="grid gap-4 lg:grid-cols-2">
-            <CompactStoryList title="Soonest calendar" items={allocation.soonestCalendar.map((event) => ({ id: event.id, title: event.title, meta: `${dayLabel(event)} · ${formatEventTime(event)}`, imageUrl: event.imageUrl, onClick: () => onOpenDetails(event) }))} />
-            <CompactStoryList title="Most browsed" items={allocation.mostBrowsed.map((event) => ({ id: event.id, title: event.title, meta: `${event.category} · ${areaLabel(event.area)}`, imageUrl: event.imageUrl, onClick: () => onOpenDetails(event) }))} />
+              <span className="rounded-full border border-emerald-950/10 bg-white/58 px-4 py-2 text-xs font-black text-emerald-950 shadow-soft">Rules-based</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {generatedArticles.map((article) => (
+                <GeneratedExploreArticleCard article={article} onOpenDetails={onOpenDetails} onOpenPlace={onOpenPlace} key={article.id} />
+              ))}
+            </div>
           </section>
-        </div>
+        ) : null}
 
-        <aside className="min-w-0 space-y-4 xl:sticky xl:top-24 xl:self-start">
-          <EventCalendarWidget
-            calendarMonth={calendarMonth}
-            dateMode={dateMode}
-            endDate={endDate}
-            locationEnabled={locationEnabled}
-            onMonthChange={onMonthChange}
-            onPickDate={onPickDate}
-            onQuickPick={onQuickPick}
-            startDate={startDate}
-          />
-          {allocation.sidebarPromo ? (
-            <SidebarFeatureCard
-              imageUrl={allocation.sidebarPromo.imageUrl}
-              label="Tonight pick"
-              title={allocation.sidebarPromo.title}
-              meta={`${formatEventTime(allocation.sidebarPromo)} · ${allocation.sidebarPromo.venueName}`}
-              onClick={() => onOpenDetails(allocation.sidebarPromo)}
-            />
-          ) : null}
-          {sidebarPick ? (
-            <SidebarFeatureCard
-              imageUrl={sidebarPick.imageUrl}
-              label="Nearby stop"
-              title={sidebarPick.name}
-              meta={`${placeKindLabel(sidebarPick.kind)} · ${areaLabel(sidebarPick.area)}`}
-              onClick={() => onOpenPlace(sidebarPick)}
-            />
-          ) : null}
-        </aside>
+        <section className="grid gap-4 lg:grid-cols-2">
+          <CompactStoryList title="Soonest calendar" items={allocation.soonestCalendar.map((event) => ({ id: event.id, title: event.title, meta: `${dayLabel(event)} · ${formatEventTime(event)}`, imageUrl: event.imageUrl, onClick: () => onOpenDetails(event) }))} />
+          <CompactStoryList title="Most browsed" items={allocation.mostBrowsed.map((event) => ({ id: event.id, title: event.title, meta: `${event.category} · ${areaLabel(event.area)}`, imageUrl: event.imageUrl, onClick: () => onOpenDetails(event) }))} />
+        </section>
       </div>
     </section>
   );
@@ -2316,6 +2309,46 @@ function ExploreGuideCardView({ guide, onOpenDetails, onOpenPlace }: { guide: Ex
             </button>
           ))}
         </div>
+      </div>
+    </article>
+  );
+}
+
+function GeneratedExploreArticleCard({
+  article,
+  onOpenDetails,
+  onOpenPlace
+}: {
+  article: GeneratedExploreArticle;
+  onOpenDetails: (event: EventItem) => void;
+  onOpenPlace: (place: UnifiedPlace) => void;
+}) {
+  const stops = [...article.foodAndDrink, ...article.evergreenPlaces].slice(0, 4);
+  return (
+    <article className="glass-card-hover rounded-[1.35rem] bg-white/28 p-2 text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.36)]">
+      <button className="group relative h-36 w-full overflow-hidden rounded-[1rem] text-left" onClick={() => onOpenDetails(article.anchor)}>
+        <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={article.anchor.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="260px" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/82 via-black/24 to-transparent" />
+        <div className="absolute left-2 top-2"><StoryLabel tone={article.tone}>{article.label}</StoryLabel></div>
+        <div className="media-copy absolute inset-x-0 bottom-0 p-3">
+          <p className="line-clamp-2 text-base font-black leading-tight text-white">{article.anchor.title}</p>
+          <p className="mt-1 truncate text-[11px] font-bold text-white/74">{formatEventTime(article.anchor)} · {article.anchor.venueName}</p>
+        </div>
+      </button>
+      <div className="p-2">
+        <button className="w-full text-left" onClick={() => onOpenDetails(article.anchor)}>
+          <h3 className="line-clamp-2 text-base font-black leading-tight">{article.title}</h3>
+          <p className="mt-2 line-clamp-3 text-xs font-bold leading-5 text-ink/62">{article.copy}</p>
+        </button>
+        {stops.length ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {stops.map((place) => (
+              <button className="max-w-full truncate rounded-full bg-white/54 px-2.5 py-1.5 text-[10px] font-black text-emerald-950 shadow-soft transition hover:bg-white" key={place.id} onClick={() => onOpenPlace(place)}>
+                {place.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </article>
   );
@@ -2547,19 +2580,6 @@ function ExploreView({
       });
   }, [area, dateMode, endDate, events, query, startDate, vibe]);
 
-  const placeResults = useMemo(() => {
-    return places
-      .filter((place) => placeMatchesQuery(place, query))
-      .filter((place) => vibe === "All" || place.vibeTags.includes(vibe))
-      .filter((place) => area === "All" || place.area === area)
-      .filter((place) => dateMode !== "Nearby" || (typeof place.distanceMiles === "number" && place.distanceMiles <= 8))
-      .sort((a, b) => {
-        if (dateMode === "Nearby") return (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99);
-        return b.popularityScore - a.popularityScore || a.name.localeCompare(b.name);
-      })
-      .slice(0, 12);
-  }, [area, dateMode, places, query, vibe]);
-
   useEffect(() => {
     setVisibleResultCount(24);
   }, [area, dateMode, endDate, query, startDate, vibe]);
@@ -2607,23 +2627,8 @@ function ExploreView({
   return (
     <motion.section {...viewMotion} className="space-y-8 pt-2 md:pt-4">
       <ExploreGuidesFrontPage
-        articles={articles}
         events={events}
         places={places}
-        calendarMonth={calendarMonth}
-        dateMode={dateMode}
-        endDate={endDate}
-        locationEnabled={locationEnabled}
-        onMonthChange={setCalendarMonth}
-        onPickDate={selectCalendarDate}
-        onQuickPick={(mode) => {
-          setDateMode(mode);
-          if (mode !== "Range") {
-            setStartDate("");
-            setEndDate("");
-          }
-        }}
-        startDate={startDate}
         onOpenDetails={onOpenDetails}
         onOpenPlace={onOpenPlace}
       />
@@ -2636,14 +2641,14 @@ function ExploreView({
         <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
           <div className="flex h-11 w-[58vw] min-w-[190px] shrink-0 items-center gap-2 rounded-full border border-white/28 bg-white/24 px-3 transition focus-within:border-neon/50 focus-within:bg-white/34 md:w-auto md:min-w-[260px] md:flex-1 md:gap-3 md:rounded-2xl md:px-4">
             <Search className="h-5 w-5 shrink-0 text-emerald-100" />
-            <input className="w-full min-w-0 bg-transparent text-sm text-bone outline-none placeholder:text-bone/38" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search food, events, places..." />
+            <input className="w-full min-w-0 bg-transparent text-sm text-bone outline-none placeholder:text-bone/38" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search events..." />
             {query ? <button className="grid h-7 w-7 place-items-center rounded-full bg-white/10" onClick={() => setQuery("")} aria-label="Clear search"><X className="h-4 w-4" /></button> : null}
           </div>
           <BrowseButton label="Date" value={dateLabel(dateMode, startDate, endDate)} active={dateMode !== "Any"} open={openFilter === "date"} onClick={() => setOpenFilter(openFilter === "date" ? null : "date")} />
           <BrowseButton label="Vibe" value={vibe} active={vibe !== "All"} open={openFilter === "vibe"} onClick={() => setOpenFilter(openFilter === "vibe" ? null : "vibe")} />
           <BrowseButton label="Area" value={areaLabel(area)} active={area !== "All"} open={openFilter === "area"} onClick={() => setOpenFilter(openFilter === "area" ? null : "area")} />
           <button className="h-11 shrink-0 rounded-full bg-neon px-4 text-xs font-black text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)] transition hover:bg-[#35E56B] md:rounded-2xl" onClick={resetFilters}>
-            {activeFilterCount ? `Clear ${activeFilterCount}` : `${results.length + placeResults.length} results`}
+            {activeFilterCount ? `Clear ${activeFilterCount}` : `${results.length} events`}
           </button>
         </div>
 
@@ -2715,28 +2720,10 @@ function ExploreView({
       </section>
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm font-bold text-bone/58">
         <p>
-          {results.length || placeResults.length ? `Showing ${visibleResults.length + placeResults.length} of ${results.length + placeResults.length}` : "No"} {area !== "All" ? `${areaLabel(area)} ` : ""}results
+          {results.length ? `Showing ${visibleResults.length} of ${results.length}` : "No"} {area !== "All" ? `${areaLabel(area)} ` : ""}events
         </p>
         {area === "Burbs" ? <p className="text-bone/42">Suburbs only. No in-town Austin venues.</p> : null}
       </div>
-      {placeResults.length ? (
-        <section>
-          <SectionHeader kicker="Unified places" title="Restaurants, bars, rooms." />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {placeResults.map((place) => (
-              <UnifiedPlaceCard
-                key={place.id}
-                place={place}
-                saved={savedPlaces.includes(place.id)}
-                visited={visitedPlaces.includes(place.id)}
-                onSave={onSavePlace}
-                onVisit={onVisitPlace}
-                onOpen={onOpenPlace}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {visibleResults.map((event) => (
           <EventCard event={event} key={event.id} saved={savedEvents.includes(event.id)} onSave={onSave} onOpenDetails={onOpenDetails} />
@@ -2752,7 +2739,7 @@ function ExploreView({
           </button>
         </div>
       ) : null}
-      {!results.length && !placeResults.length ? <EmptyPanel message="Nothing there yet. Try fewer filters." /> : null}
+      {!results.length ? <EmptyPanel message="Nothing there yet. Try fewer filters." /> : null}
     </motion.section>
   );
 }
@@ -3763,6 +3750,172 @@ function allocateExploreEvents(events: EventItem[], places: UnifiedPlace[], maxA
     .sort((a, b) => b.popularityScore + b.upcomingCount * 8 - (a.popularityScore + a.upcomingCount * 8))[0];
 
   return { guideCards, sidebarPromo, sidebarPlace, soonestCalendar, mostBrowsed };
+}
+
+function generateExplorePlanArticles(events: EventItem[], places: UnifiedPlace[]) {
+  const ranked = dedupeHomepageEvents([...events].sort((a, b) => articleEventScore(b) - articleEventScore(a) || sortSoonest(a, b)));
+  const usedEvents = new Set<string>();
+  const templates: Array<{
+    id: string;
+    title: string;
+    label: string;
+    copy: (event: EventItem, foodAndDrink: UnifiedPlace[], evergreenPlaces: UnifiedPlace[]) => string;
+    tone: "lime" | "orange" | "blue";
+    matches: (event: EventItem) => boolean;
+  }> = [
+    {
+      id: "east-side-girl-dinner-show",
+      title: "East Side Girl Dinner, Then a Show",
+      label: "East Side",
+      tone: "orange",
+      matches: (event) => event.area === "East Side" && (hasVibe(event, "Live Music", "Comedy", "Dancing", "Social") || isTonight(event)),
+      copy: (event, foodAndDrink) => `Start with ${event.venueName}, then keep the group close with ${placeListCopy(foodAndDrink, "a nearby bite or drink")}.`
+    },
+    {
+      id: "wellness-morning-brunch",
+      title: "Wellness Morning That Turns Into Brunch",
+      label: "Wellness",
+      tone: "lime",
+      matches: (event) => hasVibe(event, "Wellness", "Outdoors") && eventHour(event) < 14,
+      copy: (event, foodAndDrink, evergreenPlaces) => `Do the reset first, then make it social with ${placeListCopy(foodAndDrink, "coffee or brunch")}${evergreenPlaces.length ? ` and ${placeListCopy(evergreenPlaces, "a nearby wander")}` : ""}.`
+    },
+    {
+      id: "hot-girl-walk-plan",
+      title: "The Low-Key Hot Girl Walk Plan",
+      label: "Soft plan",
+      tone: "blue",
+      matches: (event) => hasVibe(event, "Outdoors", "Wellness", "Low-Key") && ["Barton/Zilker", "Central", "East Side"].includes(event.area),
+      copy: (event, foodAndDrink, evergreenPlaces) => `Keep it easy around ${areaLabel(event.area)} with ${placeListCopy(foodAndDrink, "a casual stop")}${evergreenPlaces.length ? ` plus ${placeListCopy(evergreenPlaces, "something nearby")}` : ""}.`
+    },
+    {
+      id: "dinner-drinks-dance-floor",
+      title: "Dinner, Drinks, and a Dance Floor",
+      label: "Dance night",
+      tone: "orange",
+      matches: (event) => hasVibe(event, "Dancing", "Late Night", "Social") && eventHour(event) >= 18,
+      copy: (event, foodAndDrink) => `Use ${event.title} as the main event, then stack ${placeListCopy(foodAndDrink, "dinner or drinks")} close enough to keep momentum.`
+    },
+    {
+      id: "free-things-real-plan",
+      title: "Free Things That Still Feel Like a Plan",
+      label: "Free",
+      tone: "lime",
+      matches: (event) => event.isFree || hasVibe(event, "Free"),
+      copy: (event, foodAndDrink, evergreenPlaces) => `Anchor on the free thing, then add ${placeListCopy(foodAndDrink, "an easy nearby stop")}${evergreenPlaces.length ? ` and ${placeListCopy(evergreenPlaces, "a no-pressure extra")}` : ""}.`
+    },
+    {
+      id: "comedy-before-after",
+      title: "Comedy Night With a Before-and-After Plan",
+      label: "Comedy",
+      tone: "blue",
+      matches: (event) => hasVibe(event, "Comedy") || /comedy|stand.?up|improv/i.test(`${event.title} ${event.category}`),
+      copy: (event, foodAndDrink) => `Bookend the laughs at ${event.venueName} with ${placeListCopy(foodAndDrink, "food or drinks")} in the same pocket of town.`
+    },
+    {
+      id: "barton-springs-day",
+      title: "Barton Springs Day, Then Somewhere Cute",
+      label: "Barton",
+      tone: "lime",
+      matches: (event) => event.area === "Barton/Zilker" && (hasVibe(event, "Outdoors", "Wellness", "Social") || eventHour(event) < 18),
+      copy: (event, foodAndDrink, evergreenPlaces) => `Make the Zilker side of town the plan with ${event.venueName}, ${placeListCopy(foodAndDrink, "a nearby reward")}${evergreenPlaces.length ? `, and ${placeListCopy(evergreenPlaces, "one extra stop")}` : ""}.`
+    },
+    {
+      id: "date-night-not-trying",
+      title: "A Date Night That Doesn’t Try Too Hard",
+      label: "Date night",
+      tone: "orange",
+      matches: (event) => hasVibe(event, "Date Night", "Low-Key", "Live Music", "Comedy") && eventHour(event) >= 17,
+      copy: (event, foodAndDrink) => `Lead with ${event.title}, then avoid overplanning with ${placeListCopy(foodAndDrink, "one or two nearby options")}.`
+    },
+    {
+      id: "weird-austin-cute",
+      title: "Weird Austin, But Make It Cute",
+      label: "Weird",
+      tone: "blue",
+      matches: (event) => hasVibe(event, "Weird Austin", "Under the Radar") || /weird|odd|drag|burlesque|market|art/i.test(`${event.title} ${event.category}`),
+      copy: (event, foodAndDrink, evergreenPlaces) => `Do the specific Austin thing, then keep the night cute with ${placeListCopy(foodAndDrink, "a close stop")}${evergreenPlaces.length ? ` and ${placeListCopy(evergreenPlaces, "a little extra texture")}` : ""}.`
+    },
+    {
+      id: "group-chat-picked-plan",
+      title: "The Group Chat Finally Picked a Plan",
+      label: "Group plan",
+      tone: "lime",
+      matches: (event) => hasVibe(event, "Popular", "Social", "Live Music", "Dancing") || event.attendeeCount > 80,
+      copy: (event, foodAndDrink) => `A high-confidence anchor with ${placeListCopy(foodAndDrink, "group-friendly food or drinks")} close enough for the whole chat.`
+    }
+  ];
+
+  return templates
+    .map((template, index) => {
+      const anchor = ranked.find((event) => template.matches(event) && !usedEvents.has(exploreEventKey(event)));
+      if (!anchor) return null;
+      usedEvents.add(exploreEventKey(anchor));
+      const foodAndDrink = findArticlePlaces(anchor, places, ["restaurant", "bar"], []).slice(0, 2);
+      const evergreenPlaces = findArticlePlaces(anchor, places, ["park", "venue", "event-spot"], foodAndDrink.map((place) => place.id)).slice(0, 2);
+      if (!foodAndDrink.length && !evergreenPlaces.length) return null;
+      const completeness = (foodAndDrink.length >= 1 ? 2 : 0) + (foodAndDrink.length >= 2 ? 1 : 0) + (evergreenPlaces.length ? 1 : 0);
+      return {
+        id: `article-${template.id}-${anchor.id}`,
+        label: template.label,
+        title: template.title,
+        copy: template.copy(anchor, foodAndDrink, evergreenPlaces),
+        anchor,
+        foodAndDrink,
+        evergreenPlaces,
+        tone: template.tone,
+        completeness,
+        index
+      };
+    })
+    .filter((article): article is GeneratedExploreArticle & { completeness: number; index: number } => Boolean(article))
+    .sort((a, b) => b.completeness - a.completeness || a.index - b.index)
+    .slice(0, 4)
+    .map(({ completeness: _completeness, index: _index, ...article }) => article);
+}
+
+function findArticlePlaces(anchor: EventItem, places: UnifiedPlace[], kinds: UnifiedPlace["kind"][], excludedIds: string[]) {
+  const origin = places.find((place) => place.source === "cactus" && place.sourceId === anchor.venueId) ?? places.find((place) => place.upcomingEventIds.includes(anchor.id));
+  const excluded = new Set(excludedIds);
+  return places
+    .filter((place) => kinds.includes(place.kind) && !excluded.has(place.id))
+    .map((place) => {
+      const coordinateDistance = origin?.latitude && origin.longitude && place.latitude && place.longitude
+        ? distanceMiles({ latitude: origin.latitude, longitude: origin.longitude }, { latitude: place.latitude, longitude: place.longitude })
+        : undefined;
+      const sameArea = place.area === anchor.area;
+      const walkable = typeof coordinateDistance === "number" ? coordinateDistance <= 1.5 : sameArea;
+      return {
+        place,
+        score:
+          (walkable ? 140 : 0) +
+          (sameArea ? 80 : 0) +
+          (typeof coordinateDistance === "number" ? Math.max(0, 60 - coordinateDistance * 24) : 0) +
+          (place.vibeTags.some((tag) => anchor.vibeTags.includes(tag)) ? 18 : 0) +
+          place.popularityScore +
+          place.upcomingCount * 3
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .map((item) => item.place);
+}
+
+function articleEventScore(event: EventItem) {
+  return event.popularityScore + event.attendeeCount / 24 + event.tastemakerCount * 3 + (isToday(event) ? 32 : 0) + (isThisWeekend(event) ? 18 : 0) + (isTonight(event) ? 12 : 0);
+}
+
+function eventHour(event: EventItem) {
+  const date = new Date(event.startDateTime);
+  return Number.isFinite(date.getTime()) ? date.getHours() : 18;
+}
+
+function hasVibe(event: EventItem, ...vibes: VibeTag[]) {
+  return vibes.some((vibe) => event.vibeTags.includes(vibe));
+}
+
+function placeListCopy(places: UnifiedPlace[], fallback: string) {
+  if (!places.length) return fallback;
+  if (places.length === 1) return places[0].name;
+  return `${places[0].name} and ${places[1].name}`;
 }
 
 function buildExploreGuideCards(events: EventItem[], places: UnifiedPlace[]) {
