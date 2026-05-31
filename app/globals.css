@@ -26,12 +26,15 @@
 }
 
 html {
+  width: 100%;
   min-height: 100%;
+  overflow-x: hidden;
   background: #09110d;
   color: var(--content-light);
 }
 
 body {
+  width: 100%;
   min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
@@ -186,9 +189,9 @@ a {
   content: "";
   pointer-events: none;
   position: absolute;
-  inset: -0.5em -0.5em auto;
+  inset: -0.5em;
   z-index: -1;
-  height: clamp(34rem, 62vw, 48rem);
+  height: min(56rem, 100%);
   border-radius: 2rem;
   background:
     radial-gradient(circle at 12% 14%, rgba(255, 255, 255, 0.34), transparent 16rem),
@@ -201,15 +204,16 @@ a {
 .landing-page::after {
   content: "";
   pointer-events: none;
-  position: absolute;
-  inset: 0 -0.75rem auto;
+  position: fixed;
+  inset: 0;
   z-index: -1;
-  height: 42rem;
+  height: 50vh;
   opacity: 0.22;
   background-image:
     radial-gradient(rgba(255, 255, 255, 0.42) 1px, transparent 1px),
     linear-gradient(115deg, transparent 0 43%, rgba(255, 255, 255, 0.18) 44%, transparent 58%);
   background-size: 22px 22px, 100% 100%;
+  mask-image: linear-gradient(to bottom, #000 0%, #000 58%, transparent 100%);
 }
 
 .landing-hero {
@@ -267,6 +271,93 @@ a {
     0 28px 70px rgba(9, 32, 20, 0.20),
     0 8px 18px rgba(9, 32, 20, 0.10),
     inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.bevel-button,
+.bevel-button-ghost,
+.bevel-button-primary {
+  border: 1px solid rgba(186, 255, 203, 0.34);
+  background:
+    linear-gradient(180deg, rgba(223, 255, 228, 0.34), rgba(35, 128, 80, 0.24)),
+    rgba(31, 122, 77, 0.20);
+  color: #062f22;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -1px 0 rgba(6, 47, 34, 0.10),
+    0 10px 24px rgba(6, 47, 34, 0.10);
+  backdrop-filter: blur(18px) saturate(155%);
+  -webkit-backdrop-filter: blur(18px) saturate(155%);
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bevel-button:hover,
+.bevel-button-ghost:hover,
+.bevel-button-primary:hover {
+  transform: translateY(-1px);
+  border-color: rgba(209, 255, 217, 0.58);
+  background:
+    linear-gradient(180deg, rgba(228, 255, 232, 0.46), rgba(48, 152, 92, 0.34)),
+    rgba(31, 122, 77, 0.30);
+  color: #052e20;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    inset 0 -1px 0 rgba(6, 47, 34, 0.12),
+    0 14px 30px rgba(6, 47, 34, 0.14);
+}
+
+.bevel-button:active,
+.bevel-button-ghost:active,
+.bevel-button-primary:active {
+  transform: scale(0.97);
+}
+
+.bevel-button-ghost {
+  border-color: rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(225, 255, 230, 0.18), rgba(31, 122, 77, 0.16)),
+    rgba(6, 47, 34, 0.10);
+  color: rgba(248, 240, 223, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 0 rgba(6, 47, 34, 0.16);
+}
+
+.bevel-button-ghost:hover {
+  background:
+    linear-gradient(180deg, rgba(226, 255, 231, 0.26), rgba(31, 122, 77, 0.24)),
+    rgba(6, 47, 34, 0.16);
+  color: #f8f0df;
+}
+
+.bevel-button-primary {
+  border-color: rgba(48, 209, 88, 0.54);
+  background:
+    linear-gradient(180deg, rgba(86, 232, 119, 0.92), rgba(35, 166, 77, 0.88)),
+    #30d158;
+  color: #052e20;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    inset 0 -1px 0 rgba(6, 47, 34, 0.18),
+    0 12px 28px rgba(48, 209, 88, 0.24);
+}
+
+.bevel-button-primary:hover {
+  background:
+    linear-gradient(180deg, rgba(105, 246, 135, 0.96), rgba(42, 184, 85, 0.92)),
+    #35e56b;
+}
+
+.bevel-button-icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
 }
 
 .full-bleed-rail-safe {

@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import { CactusApp } from "@/components/cactus-app";
 
 export default function VenuesPage() {
-  return <CactusApp initialTab="Places" />;
+  return (
+    <Suspense fallback={null}>
+      <CactusApp initialTab="Places" />
+    </Suspense>
+  );
 }
