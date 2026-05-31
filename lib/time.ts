@@ -1,6 +1,7 @@
 import type { EventItem } from "@/lib/types";
 
 const DAY = 24 * 60 * 60 * 1000;
+const STALE_EVENT_GRACE = 2 * 60 * 60 * 1000;
 
 export function eventEndTime(event: EventItem) {
   const start = new Date(event.startDateTime).getTime();
@@ -9,7 +10,9 @@ export function eventEndTime(event: EventItem) {
 }
 
 export function isUpcoming(event: EventItem, now = new Date()) {
-  return eventEndTime(event) >= now.getTime();
+  const start = new Date(event.startDateTime).getTime();
+  if (!Number.isFinite(start)) return eventEndTime(event) >= now.getTime();
+  return start >= now.getTime() - STALE_EVENT_GRACE;
 }
 
 export function isTonight(event: EventItem, now = new Date()) {

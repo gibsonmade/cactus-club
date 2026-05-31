@@ -375,6 +375,11 @@ export function CactusApp({ initialTab = "Today", initialData }: { initialTab?: 
     setVisitedPlaces((current) => (current.includes(id) ? current.filter((placeId) => placeId !== id) : [...current, id]));
   }
 
+  function addMoseyToPlan(eventId: string, placeIds: string[]) {
+    setSavedEvents((current) => uniq([eventId, ...current]));
+    setSavedPlaces((current) => uniq([...placeIds, ...current]));
+  }
+
   function addPlaceToList(listName: string, placeId: string) {
     setCustomLists((current) => ({
       ...current,
@@ -460,6 +465,7 @@ export function CactusApp({ initialTab = "Today", initialData }: { initialTab?: 
               visitedPlaces={visitedPlaces}
               onSave={toggleSavedEvent}
               onSavePlace={toggleSavedPlace}
+              onAddMoseyToPlan={addMoseyToPlan}
               onVisitPlace={toggleVisitedPlace}
               onOpenPlace={setDetailPlace}
               onOpenDetails={setDetailEvent}
@@ -1353,7 +1359,7 @@ function FeaturePanel({ places, event, onOpenPlace, onOpenDetails }: { places: U
       </div>
       <div className="relative min-h-[420px]">
         {primary ? (
-          <button className="glass-card-hover absolute left-0 top-0 h-[310px] w-[68%] overflow-hidden rounded-[1.75rem] shadow-[0_24px_70px_rgba(9,17,13,0.22)]" onClick={() => onOpenPlace(primary)}>
+          <button className="glass-card-hover absolute left-0 top-0 h-[310px] w-[68%] overflow-hidden rounded-[1.75rem]" onClick={() => onOpenPlace(primary)}>
             <SafeImage className="object-cover" src={primary.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="420px" />
           </button>
         ) : null}
@@ -1563,7 +1569,7 @@ function NarrativeSkeleton() {
 function FullBleedRail({ children, snap = true }: { children: React.ReactNode; snap?: boolean }) {
   return (
     <div className="container-bleed-rail relative overflow-visible">
-      <div className={cn("flex gap-3 overflow-x-auto px-1 py-3 hide-scrollbar", snap && "snap-x")}>
+      <div className={cn("-mx-3 flex gap-3 overflow-x-auto px-3 py-6 hide-scrollbar", snap && "snap-x")}>
         {children}
       </div>
     </div>
@@ -2071,7 +2077,7 @@ function EvergreenDiscovery({ evergreenEvents, venues, savedVenues, onSaveVenue 
       </div>
       <article className="relative min-h-[420px] overflow-hidden rounded-[1.25rem] border border-white/10 bg-black shadow-card">
         <SafeImage className="object-cover" src={item.venue.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 92vw, 720px" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.16)_0%,rgba(0,0,0,0.26)_38%,rgba(0,0,0,0.72)_72%,rgba(0,0,0,0.96)_100%)]" />
+        <div className="image-card-fade" />
         <div className="absolute inset-x-0 top-0 flex justify-between gap-3 p-4">
           <span className="rounded-full bg-bone px-3 py-2 text-xs font-black text-ink">{item.idea.category || "Austin classic"}</span>
           <button className="grid h-11 w-11 place-items-center rounded-full bg-bone text-ink transition hover:bg-neon" onClick={() => setIndex((current) => current + 1)} aria-label="Show another idea">
@@ -2164,31 +2170,48 @@ type ExploreGuideCard = {
 
 type GeneratedExploreArticle = {
   id: string;
-  label: string;
-  title: string;
-  copy: string;
-  anchor: EventItem;
-  foodAndDrink: UnifiedPlace[];
-  evergreenPlaces: UnifiedPlace[];
+  headline: string;
+  hook: string;
+  featuredEvent: EventItem;
+  before?: MoseyStop;
+  after?: MoseyStop;
+  bonus?: MoseyStop;
+  cta: string;
+  area: Area;
+  timeOfDay: "morning" | "afternoon" | "evening" | "late";
+  vibe: string;
+  rankedPlaceIds: string[];
   tone: "lime" | "orange" | "blue";
+};
+
+type MoseyStop = {
+  label: "Before" | "After" | "Bonus";
+  place: UnifiedPlace;
+  copy: string;
 };
 
 function ExploreGuidesFrontPage({
   events,
   places,
+  savedEvents,
+  savedPlaces,
+  onAddToPlan,
   onOpenDetails,
   onOpenPlace
 }: {
   events: EventItem[];
   places: UnifiedPlace[];
+  savedEvents: string[];
+  savedPlaces: string[];
+  onAddToPlan: (eventId: string, placeIds: string[]) => void;
   onOpenDetails: (event: EventItem) => void;
   onOpenPlace: (place: UnifiedPlace) => void;
 }) {
-  const allocation = useMemo(() => allocateExploreEvents(events, places), [events, places]);
-  const generatedArticles = useMemo(() => generateExplorePlanArticles(events, places), [events, places]);
-  const guideCards = allocation.guideCards;
-  const heroGuide = guideCards[0];
-  const supportingGuides = guideCards.slice(1, 6);
+  const allocation = useMemo(() => allocateExplorePlans(events, places), [events, places]);
+  const generatedArticles = allocation.weeklyPlans;
+  const [activeArticle, setActiveArticle] = useState<GeneratedExploreArticle | null>(null);
+  const heroGuide = allocation.heroPlan;
+  const supportingGuides = allocation.supportingPlans;
 
   if (!heroGuide && !places.length) return null;
 
@@ -2209,11 +2232,11 @@ function ExploreGuidesFrontPage({
       </div>
 
       <div className="min-w-0 space-y-5">
-        {heroGuide ? <ExploreGuideHeroCard guide={heroGuide} onOpenDetails={onOpenDetails} onOpenPlace={onOpenPlace} /> : null}
+        {heroGuide ? <ExploreGuideHeroCard article={heroGuide} onOpen={() => setActiveArticle(heroGuide)} onOpenPlace={onOpenPlace} /> : null}
 
         <section className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {supportingGuides.map((guide) => (
-            <ExploreGuideCardView guide={guide} key={guide.id} onOpenDetails={onOpenDetails} onOpenPlace={onOpenPlace} />
+          {supportingGuides.map((article) => (
+            <ExploreGuideCardView article={article} key={article.id} onOpen={() => setActiveArticle(article)} />
           ))}
         </section>
 
@@ -2222,61 +2245,70 @@ function ExploreGuidesFrontPage({
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-cactus">Austin plan guides</p>
-                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.035em] md:text-3xl">Start with the thing, then walk somewhere good.</h2>
+                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.035em] md:text-3xl">Start with the thing, then make the rest easy.</h2>
               </div>
-              <span className="rounded-full border border-emerald-950/10 bg-white/58 px-4 py-2 text-xs font-black text-emerald-950 shadow-soft">Rules-based</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {generatedArticles.map((article) => (
-                <GeneratedExploreArticleCard article={article} onOpenDetails={onOpenDetails} onOpenPlace={onOpenPlace} key={article.id} />
+                <GeneratedExploreArticleCard article={article} onOpen={() => setActiveArticle(article)} key={article.id} />
               ))}
             </div>
           </section>
         ) : null}
 
         <section className="grid gap-4 lg:grid-cols-2">
-          <CompactStoryList title="Soonest calendar" items={allocation.soonestCalendar.map((event) => ({ id: event.id, title: event.title, meta: `${dayLabel(event)} · ${formatEventTime(event)}`, imageUrl: event.imageUrl, onClick: () => onOpenDetails(event) }))} />
-          <CompactStoryList title="Most browsed" items={allocation.mostBrowsed.map((event) => ({ id: event.id, title: event.title, meta: `${event.category} · ${areaLabel(event.area)}`, imageUrl: event.imageUrl, onClick: () => onOpenDetails(event) }))} />
+          <CompactStoryList title="Soonest calendar" items={allocation.soonestPlans.map((article) => ({ id: article.id, title: article.featuredEvent.title, meta: `${dayLabel(article.featuredEvent)} · ${formatEventTime(article.featuredEvent)}`, imageUrl: article.featuredEvent.imageUrl, onClick: () => setActiveArticle(article) }))} />
+          <CompactStoryList title="Most browsed" items={allocation.mostBrowsedPlans.map((article) => ({ id: article.id, title: article.featuredEvent.title, meta: `${article.featuredEvent.category} · ${areaLabel(article.featuredEvent.area)}`, imageUrl: article.featuredEvent.imageUrl, onClick: () => setActiveArticle(article) }))} />
         </section>
       </div>
+      <MoseyArticleDrawer
+        article={activeArticle}
+        savedEvents={savedEvents}
+        savedPlaces={savedPlaces}
+        onAddToPlan={onAddToPlan}
+        onClose={() => setActiveArticle(null)}
+        onOpenDetails={onOpenDetails}
+        onOpenPlace={onOpenPlace}
+      />
     </section>
   );
 }
 
-function ExploreGuideHeroCard({ guide, onOpenDetails, onOpenPlace }: { guide: ExploreGuideCard; onOpenDetails: (event: EventItem) => void; onOpenPlace: (place: UnifiedPlace) => void }) {
+function ExploreGuideHeroCard({ article, onOpen, onOpenPlace }: { article: GeneratedExploreArticle; onOpen: () => void; onOpenPlace: (place: UnifiedPlace) => void }) {
+  const stopButtons = planFoodDrinkStops(article).slice(0, 2);
   return (
     <article className="glass-card glass-card-hover grid min-w-0 gap-4 rounded-[2rem] p-3 text-ink lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
-      <button className="group relative min-h-[430px] overflow-hidden rounded-[1.65rem] text-left" onClick={() => onOpenDetails(guide.anchor)}>
-        <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={guide.anchor.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 1024px) 94vw, 700px" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.18)_34%,rgba(0,0,0,0.86)_100%)]" />
+      <button className="group relative min-h-[430px] overflow-hidden rounded-[1.65rem] text-left" onClick={onOpen}>
+        <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={article.featuredEvent.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 1024px) 94vw, 700px" />
+        <div className="image-card-fade" />
         <div className="media-copy absolute inset-x-0 bottom-0 p-5 md:p-7">
-          <StoryLabel tone={guide.tone}>{guide.label}</StoryLabel>
-          <h2 className="mt-4 max-w-2xl text-4xl font-black leading-[0.94] tracking-[-0.045em] text-white md:text-6xl">{guide.title}</h2>
-          <StoryMetadataRow primary={`${dayLabel(guide.anchor)} · ${formatEventTime(guide.anchor)}`} secondary={guide.anchor.venueName} />
+          <span className="inline-flex w-fit rounded-full border border-white/24 bg-black/34 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-white backdrop-blur-xl">
+            {explorePlanLabel(article)}
+          </span>
+          <h2 className="mt-4 max-w-2xl text-4xl font-black leading-[0.94] tracking-[-0.045em] text-white md:text-6xl">{eventAtVenueTitle(article.featuredEvent)}</h2>
+          <StoryMetadataRow primary={`${dayLabel(article.featuredEvent)} · ${formatEventTime(article.featuredEvent)}`} secondary={article.featuredEvent.venueName} />
         </div>
       </button>
       <div className="flex min-w-0 flex-col justify-between gap-4 p-2 lg:p-4">
         <div>
-          <p className="text-sm font-bold leading-6 text-ink/68">{guide.copy}</p>
+          <p className="text-sm font-bold leading-6 text-ink/68">{article.hook}</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            {guide.nearbyEvents.map((event) => (
-              <button className="rounded-full bg-emerald-950 px-3 py-2 text-xs font-black text-white shadow-soft transition hover:-translate-y-0.5" key={event.id} onClick={() => onOpenDetails(event)}>
-                {formatEventTime(event)} · {event.venueName}
-              </button>
-            ))}
+            <button className="rounded-full bg-emerald-950 px-3 py-2 text-xs font-black text-white shadow-soft transition hover:-translate-y-0.5" onClick={onOpen}>
+              {formatEventTime(article.featuredEvent)} · {article.featuredEvent.venueName}
+            </button>
           </div>
         </div>
         <div className="grid gap-3">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-cactus">Add a stop nearby</p>
-          {guide.addOns.slice(0, 2).map((place) => (
-            <button className="grid grid-cols-[82px_1fr] gap-3 rounded-[1.15rem] bg-white/36 p-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] transition hover:-translate-y-0.5 hover:bg-white/50" key={place.id} onClick={() => onOpenPlace(place)}>
+          {stopButtons.map((stop) => (
+            <button className="grid grid-cols-[82px_1fr] gap-3 rounded-[1.15rem] bg-white/36 p-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] transition hover:-translate-y-0.5 hover:bg-white/50" key={stop.place.id} onClick={() => onOpenPlace(stop.place)}>
               <span className="relative h-20 overflow-hidden rounded-[0.95rem]">
-                <SafeImage className="object-cover" src={place.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="100px" />
+                <SafeImage className="object-cover" src={stop.place.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="100px" />
               </span>
               <span className="min-w-0 py-1">
-                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-cactus">{placeKindLabel(place.kind)}</span>
-                <span className="mt-1 line-clamp-2 block text-base font-black leading-tight">{place.name}</span>
-                <span className="mt-2 block text-xs font-bold text-ink/58">{place.price ?? "$$"} · {areaLabel(place.area)}</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-cactus">{stop.label}</span>
+                <span className="mt-1 line-clamp-2 block text-base font-black leading-tight">{stop.place.name}</span>
+                <span className="mt-2 block text-xs font-bold text-ink/58">{stop.place.price ?? "$$"} · {areaLabel(stop.place.area)}</span>
               </span>
             </button>
           ))}
@@ -2286,27 +2318,28 @@ function ExploreGuideHeroCard({ guide, onOpenDetails, onOpenPlace }: { guide: Ex
   );
 }
 
-function ExploreGuideCardView({ guide, onOpenDetails, onOpenPlace }: { guide: ExploreGuideCard; onOpenDetails: (event: EventItem) => void; onOpenPlace: (place: UnifiedPlace) => void }) {
+function ExploreGuideCardView({ article, onOpen }: { article: GeneratedExploreArticle; onOpen: () => void }) {
+  const stops = planFoodDrinkStops(article).slice(0, 2);
   return (
     <article className="glass-card glass-card-hover rounded-[1.75rem] p-3 text-ink">
-      <button className="group relative h-56 w-full overflow-hidden rounded-[1.35rem] text-left" onClick={() => onOpenDetails(guide.anchor)}>
-        <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={guide.anchor.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="420px" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/84 via-black/24 to-transparent" />
+      <button className="group relative h-56 w-full overflow-hidden rounded-[1.35rem] text-left" onClick={onOpen}>
+        <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={article.featuredEvent.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="420px" />
+        <div className="image-card-fade" />
         <div className="media-copy absolute inset-x-0 bottom-0 p-4">
-          <StoryLabel tone={guide.tone}>{guide.label}</StoryLabel>
-          <h3 className="mt-3 line-clamp-2 text-2xl font-black leading-tight text-white">{guide.title}</h3>
+          <StoryLabel tone={article.tone}>{explorePlanLabel(article)}</StoryLabel>
+          <h3 className="mt-3 line-clamp-2 text-2xl font-black leading-tight text-white">{eventAtVenueTitle(article.featuredEvent)}</h3>
         </div>
       </button>
       <div className="p-3">
-        <p className="line-clamp-2 text-sm font-semibold leading-6 text-ink/66">{guide.copy}</p>
+        <p className="line-clamp-2 text-sm font-semibold leading-6 text-ink/66">{article.hook}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button className="rounded-full bg-emerald-950 px-3 py-2 text-xs font-black text-white transition hover:-translate-y-0.5" onClick={() => onOpenDetails(guide.anchor)}>
-            {formatEventTime(guide.anchor)}
+          <button className="rounded-full bg-emerald-950 px-3 py-2 text-xs font-black text-white transition hover:-translate-y-0.5" onClick={onOpen}>
+            {formatEventTime(article.featuredEvent)}
           </button>
-          {guide.addOns.slice(0, 2).map((place) => (
-            <button className="rounded-full bg-white/54 px-3 py-2 text-xs font-black text-emerald-950 shadow-soft transition hover:-translate-y-0.5 hover:bg-white" key={place.id} onClick={() => onOpenPlace(place)}>
-              {place.name}
-            </button>
+          {stops.map((stop) => (
+            <span className="rounded-full bg-white/54 px-3 py-2 text-xs font-black text-emerald-950 shadow-soft" key={stop.place.id}>
+              {stop.place.name}
+            </span>
           ))}
         </div>
       </div>
@@ -2316,47 +2349,154 @@ function ExploreGuideCardView({ guide, onOpenDetails, onOpenPlace }: { guide: Ex
 
 function GeneratedExploreArticleCard({
   article,
+  onOpen
+}: {
+  article: GeneratedExploreArticle;
+  onOpen: () => void;
+}) {
+  const stops = [article.before, article.after, article.bonus].filter(Boolean) as MoseyStop[];
+  return (
+    <button className="glass-card-hover flex h-full flex-col rounded-[1.35rem] bg-white/28 p-2 text-left text-ink" onClick={onOpen}>
+      <span className="group relative h-36 w-full overflow-hidden rounded-[1rem] text-left">
+        <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={article.featuredEvent.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="260px" />
+        <div className="image-card-fade" />
+        <div className="absolute left-2 top-2"><StoryLabel tone={article.tone}>{article.timeOfDay}</StoryLabel></div>
+        <div className="media-copy absolute inset-x-0 bottom-0 p-3">
+          <p className="line-clamp-2 text-base font-black leading-tight text-white">{article.featuredEvent.title}</p>
+          <p className="mt-1 truncate text-[11px] font-bold text-white/74">{formatEventTime(article.featuredEvent)} · {article.featuredEvent.venueName}</p>
+        </div>
+      </span>
+      <span className="flex flex-1 flex-col p-2">
+        <span className="line-clamp-2 text-base font-black leading-tight">{eventAtVenueTitle(article.featuredEvent)}</span>
+        <span className="mt-2 line-clamp-3 text-xs font-bold leading-5 text-ink/62">{article.hook}</span>
+        {stops.length ? (
+          <span className="mt-3 flex flex-wrap gap-1.5">
+            {stops.map((place) => (
+              <span className="max-w-full truncate rounded-full bg-white/54 px-2.5 py-1.5 text-[10px] font-black text-emerald-950 shadow-soft" key={place.place.id}>
+                {place.place.name}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
+function MoseyArticleDrawer({
+  article,
+  savedEvents,
+  savedPlaces,
+  onAddToPlan,
+  onClose,
   onOpenDetails,
   onOpenPlace
 }: {
-  article: GeneratedExploreArticle;
+  article: GeneratedExploreArticle | null;
+  savedEvents: string[];
+  savedPlaces: string[];
+  onAddToPlan: (eventId: string, placeIds: string[]) => void;
+  onClose: () => void;
   onOpenDetails: (event: EventItem) => void;
   onOpenPlace: (place: UnifiedPlace) => void;
 }) {
-  const stops = [...article.foodAndDrink, ...article.evergreenPlaces].slice(0, 4);
+  if (!article) return null;
+  const activeArticle = article;
+  const stops = [activeArticle.before, activeArticle.after, activeArticle.bonus].filter(Boolean) as MoseyStop[];
+  const fullySaved = savedEvents.includes(activeArticle.featuredEvent.id) && activeArticle.rankedPlaceIds.every((id) => savedPlaces.includes(id));
+
+  function addToPlan() {
+    onAddToPlan(activeArticle.featuredEvent.id, activeArticle.rankedPlaceIds);
+  }
+
+  function openEventDetails() {
+    onClose();
+    onOpenDetails(activeArticle.featuredEvent);
+  }
+
+  function openPlaceDetails(place: UnifiedPlace) {
+    onClose();
+    onOpenPlace(place);
+  }
+
   return (
-    <article className="glass-card-hover rounded-[1.35rem] bg-white/28 p-2 text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.36)]">
-      <button className="group relative h-36 w-full overflow-hidden rounded-[1rem] text-left" onClick={() => onOpenDetails(article.anchor)}>
-        <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={article.anchor.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="260px" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/82 via-black/24 to-transparent" />
-        <div className="absolute left-2 top-2"><StoryLabel tone={article.tone}>{article.label}</StoryLabel></div>
-        <div className="media-copy absolute inset-x-0 bottom-0 p-3">
-          <p className="line-clamp-2 text-base font-black leading-tight text-white">{article.anchor.title}</p>
-          <p className="mt-1 truncate text-[11px] font-bold text-white/74">{formatEventTime(article.anchor)} · {article.anchor.venueName}</p>
-        </div>
-      </button>
-      <div className="p-2">
-        <button className="w-full text-left" onClick={() => onOpenDetails(article.anchor)}>
-          <h3 className="line-clamp-2 text-base font-black leading-tight">{article.title}</h3>
-          <p className="mt-2 line-clamp-3 text-xs font-bold leading-5 text-ink/62">{article.copy}</p>
-        </button>
-        {stops.length ? (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {stops.map((place) => (
-              <button className="max-w-full truncate rounded-full bg-white/54 px-2.5 py-1.5 text-[10px] font-black text-emerald-950 shadow-soft transition hover:bg-white" key={place.id} onClick={() => onOpenPlace(place)}>
-                {place.name}
-              </button>
-            ))}
+    <AnimatePresence>
+      <motion.div className="fixed inset-0 z-[90] bg-emerald-950/54 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+        <motion.aside
+          className="absolute inset-x-0 bottom-0 max-h-[92vh] overflow-y-auto rounded-t-[1.75rem] border border-white/40 bg-bone text-ink shadow-[0_-24px_90px_rgba(0,0,0,0.34)] md:inset-x-auto md:right-5 md:top-5 md:h-[calc(100vh-2.5rem)] md:w-[460px] md:max-h-none md:rounded-[1.75rem]"
+          initial={{ y: 36, opacity: 0, scale: 0.98 }}
+          animate={{ y: 0, opacity: 1, scale: 1 }}
+          exit={{ y: 36, opacity: 0, scale: 0.98 }}
+          transition={{ type: "spring", stiffness: 320, damping: 32 }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-emerald-950/10 bg-bone/88 p-4 backdrop-blur-xl">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-cactus">{areaLabel(activeArticle.area)}</p>
+              <p className="mt-1 text-sm font-black text-ink/62">{formatEventTime(activeArticle.featuredEvent)} · {activeArticle.vibe}</p>
+            </div>
+            <button className="grid h-10 w-10 place-items-center rounded-full bg-emerald-950 text-bone transition hover:bg-cactus" onClick={onClose} aria-label="Close plan">
+              <X className="h-5 w-5" />
+            </button>
           </div>
-        ) : null}
-      </div>
-    </article>
+
+          <div className="space-y-4 p-4">
+            <div>
+              <h2 className="font-display text-4xl font-black leading-[0.95] tracking-[-0.035em] md:text-5xl">{activeArticle.headline}</h2>
+              <p className="mt-3 text-base font-semibold leading-7 text-ink/68">{activeArticle.hook}</p>
+            </div>
+
+            <section className="rounded-[1.35rem] bg-white p-2 shadow-soft">
+              <p className="px-2 pb-2 pt-1 text-xs font-black uppercase tracking-[0.16em] text-cactus">Featured event</p>
+              <button className="grid w-full grid-cols-[96px_1fr] gap-3 rounded-[1.1rem] bg-emerald-950 text-left text-bone transition hover:-translate-y-0.5 hover:bg-cactus" onClick={openEventDetails}>
+                <span className="relative min-h-[108px] overflow-hidden rounded-l-[1.1rem] bg-black">
+                  <SafeImage className="object-cover" src={activeArticle.featuredEvent.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="120px" />
+                </span>
+                <span className="min-w-0 py-3 pr-3">
+                  <span className="line-clamp-2 text-lg font-black leading-tight">{activeArticle.featuredEvent.title}</span>
+                  <span className="mt-2 block text-xs font-bold text-bone/70">{dayLabel(activeArticle.featuredEvent)} · {formatEventTime(activeArticle.featuredEvent)}</span>
+                  <span className="mt-1 block truncate text-xs font-bold text-bone/56">{activeArticle.featuredEvent.venueName}</span>
+                </span>
+              </button>
+            </section>
+
+            {stops.map((stop) => (
+              <section className="rounded-[1.35rem] bg-white/72 p-3 shadow-soft" key={`${stop.label}-${stop.place.id}`}>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-cactus">{stop.label} recommendation</p>
+                <p className="mt-2 text-sm font-bold leading-6 text-ink/68">{stop.copy}</p>
+                <button className="mt-3 grid w-full grid-cols-[74px_1fr] gap-3 rounded-[1rem] bg-emerald-950/6 p-2 text-left transition hover:-translate-y-0.5 hover:bg-emerald-950/10" onClick={() => openPlaceDetails(stop.place)}>
+                  <span className="relative h-16 overflow-hidden rounded-[0.8rem] bg-white">
+                    <SafeImage className="object-cover" src={stop.place.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="90px" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="line-clamp-1 text-base font-black">{stop.place.name}</span>
+                    <span className="mt-1 block text-xs font-bold text-ink/56">{placeKindLabel(stop.place.kind)} · {areaLabel(stop.place.area)}</span>
+                    <span className="mt-1 block line-clamp-1 text-xs font-semibold text-ink/48">{stop.place.price ?? "$$"} · {stop.place.openFor ?? stop.place.neighborhoodPersonality}</span>
+                  </span>
+                </button>
+              </section>
+            ))}
+
+            <button
+              className={cn(
+                "flex h-12 w-full items-center justify-center gap-2 rounded-full px-5 py-4 text-sm font-black shadow-[0_14px_32px_rgba(5,46,22,0.18)] transition",
+                fullySaved ? "bg-emerald-950 text-bone" : "bg-neon text-emerald-950 hover:bg-[#35E56B]"
+              )}
+              onClick={addToPlan}
+            >
+              {fullySaved ? <Check className="h-5 w-5" /> : <ListPlus className="h-5 w-5" />}
+              {fullySaved ? "Added to plan" : activeArticle.cta}
+            </button>
+          </div>
+        </motion.aside>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
 function LocalGuideArticleCard({ article, place }: { article: AtxArticle; place?: UnifiedPlace }) {
   return (
-    <a className="glass-card-hover rounded-[1.35rem] bg-white/28 p-2 text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.36)]" href={article.url} target="_blank" rel="noreferrer">
+    <a className="glass-card-hover rounded-[1.35rem] bg-white/28 p-2 text-ink" href={article.url} target="_blank" rel="noreferrer">
       <div className="relative h-32 overflow-hidden rounded-[1rem]">
         <SafeImage className="object-cover transition duration-700 hover:scale-105" src={place?.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="220px" />
         <div className="absolute left-2 top-2"><StoryLabel tone="lime">{article.tags?.[0] ?? "Guide"}</StoryLabel></div>
@@ -2371,9 +2511,9 @@ function LocalGuideArticleCard({ article, place }: { article: AtxArticle; place?
 
 function SidebarFeatureCard({ imageUrl, label, title, meta, onClick }: { imageUrl?: string; label: string; title: string; meta: string; onClick: () => void }) {
   return (
-    <button className="glass-card-hover relative min-h-[210px] w-full overflow-hidden rounded-[1.45rem] text-left shadow-card" onClick={onClick}>
+    <button className="glass-card-hover relative min-h-[210px] w-full overflow-hidden rounded-[1.45rem] text-left" onClick={onClick}>
       <SafeImage className="object-cover transition duration-700 hover:scale-105" src={imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="340px" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/30 to-transparent" />
+      <div className="image-card-fade" />
       <div className="media-copy absolute inset-x-0 bottom-0 p-4">
         <StoryLabel tone="lime">{label}</StoryLabel>
         <h3 className="mt-2 line-clamp-2 text-xl font-black text-white">{title}</h3>
@@ -2451,7 +2591,7 @@ function EventCalendarWidget({
 function StoryLabel({ children, tone }: { children: React.ReactNode; tone: "lime" | "orange" | "blue" }) {
   return (
     <span className={cn(
-      "inline-flex w-fit rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] shadow-soft",
+      "inline-flex w-fit rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em]",
       tone === "lime" && "bg-neon text-emerald-950",
       tone === "orange" && "bg-[#ffb86b] text-emerald-950",
       tone === "blue" && "bg-sky-200 text-emerald-950"
@@ -2483,6 +2623,7 @@ function ExploreView({
   preferredVibes,
   onSave,
   onSavePlace,
+  onAddMoseyToPlan,
   onVisitPlace,
   onOpenPlace,
   onOpenDetails,
@@ -2500,6 +2641,7 @@ function ExploreView({
   preferredVibes: VibeTag[];
   onSave: (id: string) => void;
   onSavePlace: (id: string) => void;
+  onAddMoseyToPlan: (eventId: string, placeIds: string[]) => void;
   onVisitPlace: (id: string) => void;
   onOpenPlace: (place: UnifiedPlace) => void;
   onOpenDetails: (event: EventItem) => void;
@@ -2575,8 +2717,7 @@ function ExploreView({
         return typeof event.distanceMiles === "number" && event.distanceMiles <= 8;
       })
       .sort((a, b) => {
-        if (dateMode === "Nearby") return (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99);
-        return sortSoonest(a, b);
+        return sortSoonest(a, b) || (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99);
       });
   }, [area, dateMode, endDate, events, query, startDate, vibe]);
 
@@ -2585,6 +2726,7 @@ function ExploreView({
   }, [area, dateMode, endDate, query, startDate, vibe]);
 
   const visibleResults = useMemo(() => results.slice(0, visibleResultCount), [results, visibleResultCount]);
+  const visibleResultGroups = useMemo(() => groupEventsByDayAndTime(visibleResults), [visibleResults]);
   function selectVibe(next: VibeTag | "All") {
     setVibe(next);
     setOpenFilter(null);
@@ -2629,6 +2771,9 @@ function ExploreView({
       <ExploreGuidesFrontPage
         events={events}
         places={places}
+        savedEvents={savedEvents}
+        savedPlaces={savedPlaces}
+        onAddToPlan={onAddMoseyToPlan}
         onOpenDetails={onOpenDetails}
         onOpenPlace={onOpenPlace}
       />
@@ -2724,9 +2869,24 @@ function ExploreView({
         </p>
         {area === "Burbs" ? <p className="text-bone/42">Suburbs only. No in-town Austin venues.</p> : null}
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {visibleResults.map((event) => (
-          <EventCard event={event} key={event.id} saved={savedEvents.includes(event.id)} onSave={onSave} onOpenDetails={onOpenDetails} />
+      <div className="space-y-8">
+        {visibleResultGroups.map((group) => (
+          <section className="space-y-3" key={group.id}>
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-neon">{group.day}</p>
+                <h2 className="text-2xl font-black leading-none tracking-[-0.035em] text-bone">{group.timeLabel}</h2>
+              </div>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-bone/46">
+                {group.events.length} {group.events.length === 1 ? "event" : "events"}
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {group.events.map((event) => (
+                <EventCard event={event} key={event.id} saved={savedEvents.includes(event.id)} onSave={onSave} onOpenDetails={onOpenDetails} />
+              ))}
+            </div>
+          </section>
         ))}
       </div>
       {visibleResults.length < results.length ? (
@@ -2940,7 +3100,7 @@ function PlanVenueCard({ venue, onRemove }: { venue: VenueItem; onRemove: (id: s
   return (
     <motion.article className="relative min-h-[300px] overflow-hidden rounded-[1.65rem] border border-white/10 bg-white/8 shadow-card" whileHover={{ y: -3 }} transition={{ duration: 0.22 }}>
       <SafeImage className="object-cover opacity-76" src={venue.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 90vw, 420px" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.10)_0%,rgba(0,0,0,0.24)_35%,rgba(0,0,0,0.74)_72%,rgba(0,0,0,0.98)_100%)]" />
+      <div className="image-card-fade" />
       <button className="absolute right-3 top-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-white/26 text-bone shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] backdrop-blur-xl transition hover:bg-white/70 hover:text-ink" onClick={() => onRemove(venue.id)} aria-label={`Remove ${venue.name} from plan`}>
         <X className="h-4 w-4" />
       </button>
@@ -3101,7 +3261,7 @@ function EditorialSection({ title, kicker, events, savedEvents, onSave, onOpenDe
     <section>
       <SectionHeader kicker={kicker} title={title} />
       {variant === "rail" ? (
-        <div className="flex gap-4 overflow-x-auto pb-2 hide-scrollbar">
+        <div className="-mx-3 flex gap-4 overflow-x-auto px-3 py-6 hide-scrollbar">
           {events.map((event) => <div className="w-[78vw] shrink-0 sm:w-[360px]" key={event.id}><EventCard event={event} saved={savedEvents.includes(event.id)} onSave={onSave} onOpenDetails={onOpenDetails} /></div>)}
         </div>
       ) : (
@@ -3124,8 +3284,7 @@ function EventCard({ event, saved, onSave, onOpenDetails, size = "default", tone
     >
       <button className="absolute inset-0 z-10 cursor-pointer text-left" onClick={() => onOpenDetails(event)} aria-label={`Open details for ${event.title}`} />
       <SafeImage className="object-cover transition duration-700 group-hover:scale-105" src={event.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 90vw, 420px" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.16)_0%,rgba(0,0,0,0.34)_34%,rgba(0,0,0,0.84)_74%,rgba(0,0,0,0.98)_100%)]" />
-      <div className="absolute inset-x-0 bottom-0 h-4/5 bg-gradient-to-t from-black via-black/82 to-transparent" />
+      <div className="image-card-fade" />
       <div className="absolute inset-x-0 top-0 flex items-start justify-between p-3">
         <span className="media-chip rounded-full bg-white/26 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-bone/88 backdrop-blur-xl">{dayLabel(event)}</span>
         <button className={cn("relative z-20 grid h-10 w-10 place-items-center rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.34)] backdrop-blur-xl transition", saved ? "bg-neon text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)]" : "bg-white/26 text-bone hover:bg-white/70 hover:text-ink")} onClick={(click) => { click.stopPropagation(); onSave(event.id); }} aria-label={saved ? "Unsave event" : "Save event"}>
@@ -3164,7 +3323,7 @@ function VenueCard({ venue, saved, onSave }: { venue: VenueItem; saved: boolean;
   return (
     <motion.article className="relative min-h-[300px] overflow-hidden rounded-[1.65rem] border border-white/10 bg-white/8 shadow-card" whileHover={{ y: -3 }} transition={{ duration: 0.22 }}>
       <SafeImage className="object-cover opacity-76" src={venue.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 90vw, 420px" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.16)_0%,rgba(0,0,0,0.32)_34%,rgba(0,0,0,0.82)_72%,rgba(0,0,0,0.98)_100%)]" />
+      <div className="image-card-fade" />
       <button className={cn("absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.34)] backdrop-blur-xl transition", saved ? "bg-neon text-emerald-950 shadow-[0_8px_24px_rgba(48,209,88,0.28)]" : "bg-white/26 text-bone hover:bg-white/70 hover:text-ink")} onClick={() => onSave(venue.id)} aria-label={saved ? "Unsave venue" : "Save venue"}>
         <Heart className={cn("h-5 w-5", saved && "fill-current")} />
       </button>
@@ -3212,7 +3371,7 @@ function UnifiedPlaceCard({
     <motion.article className="group relative min-h-[310px] overflow-hidden rounded-[1.65rem] border border-white/14 bg-white/10 shadow-card" whileHover={{ y: -3 }} transition={{ duration: 0.22 }}>
       <button className="absolute inset-0 z-10 cursor-pointer text-left" onClick={() => onOpen(place)} aria-label={`Open details for ${place.name}`} />
       <SafeImage className="object-cover opacity-78 transition duration-700 group-hover:scale-105" src={place.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 90vw, 420px" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.15)_0%,rgba(0,0,0,0.34)_32%,rgba(0,0,0,0.84)_72%,rgba(0,0,0,0.98)_100%)]" />
+      <div className="image-card-fade" />
       <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3">
         <span className="media-chip rounded-full bg-white/28 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-bone backdrop-blur-xl">
           {placeKindLabel(place.kind)}
@@ -3606,6 +3765,42 @@ function localDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function groupEventsByDayAndTime(events: EventItem[]) {
+  const groups = new Map<string, { id: string; day: string; timeLabel: string; events: EventItem[] }>();
+  events.forEach((event) => {
+    const start = new Date(event.startDateTime);
+    const dateKey = Number.isFinite(start.getTime()) ? localDateKey(start) : event.date || "unknown";
+    const period = eventTimePeriod(event);
+    const id = `${dateKey}-${period.id}`;
+    const existing = groups.get(id);
+    if (existing) {
+      existing.events.push(event);
+      return;
+    }
+    groups.set(id, {
+      id,
+      day: eventDayHeading(event),
+      timeLabel: period.label,
+      events: [event]
+    });
+  });
+  return Array.from(groups.values());
+}
+
+function eventDayHeading(event: EventItem) {
+  if (isToday(event)) return "Today";
+  if (isTomorrow(event)) return "Tomorrow";
+  return dayLabel(event);
+}
+
+function eventTimePeriod(event: EventItem) {
+  const hour = eventHour(event);
+  if (hour < 12) return { id: "morning", label: "Morning" };
+  if (hour < 17) return { id: "afternoon", label: "Afternoon" };
+  if (hour < 22) return { id: "evening", label: "Evening" };
+  return { id: "late", label: "Late night" };
+}
+
 function isQuickDateSelection(value: string, mode: "Any" | "Today" | "Tomorrow" | "Weekend" | "Range" | "Nearby") {
   const today = new Date();
   const todayKey = localDateKey(today);
@@ -3648,6 +3843,96 @@ function dedupeHomepageEvents(events: EventItem[]) {
     seen.add(key);
     return true;
   });
+}
+
+function allocateExplorePlans(events: EventItem[], places: UnifiedPlace[]) {
+  const ranked = dedupeHomepageEvents([...events].sort((a, b) => articleEventScore(b) - articleEventScore(a) || sortSoonest(a, b)));
+  const soonest = dedupeHomepageEvents([...events].sort(sortSoonest));
+  const today = ranked.filter((event) => isToday(event));
+  const tomorrow = ranked.filter((event) => isTomorrow(event));
+  const primaryPool = today.length ? today : tomorrow.length ? tomorrow : ranked;
+  const used = new Set<string>();
+  let dailyPlans = buildPlansFromAnchors(primaryPool, places, 6, used, "daily");
+  if (dailyPlans.length < 6) {
+    dailyPlans = [...dailyPlans, ...buildPlansFromAnchors(ranked, places, 6 - dailyPlans.length, used, "daily-fallback")];
+  }
+
+  const weeklyPool = ranked.filter((event) => isWithinNextDays(event, 7));
+  let weeklyPlans = buildPlansFromAnchors(weeklyPool, places, 4, used, "week");
+  if (weeklyPlans.length < 4) {
+    weeklyPlans = [...weeklyPlans, ...buildPlansFromAnchors(weeklyPool.length ? weeklyPool : ranked, places, 4 - weeklyPlans.length, new Set(weeklyPlans.map((article) => exploreEventKey(article.featuredEvent))), "week-fill")];
+  }
+
+  return {
+    heroPlan: dailyPlans[0],
+    supportingPlans: dailyPlans.slice(1, 6),
+    weeklyPlans: weeklyPlans.slice(0, 4),
+    soonestPlans: buildPlansFromAnchors(soonest, places, 5, new Set(), "soonest"),
+    mostBrowsedPlans: buildPlansFromAnchors(ranked, places, 5, new Set(), "browsed")
+  };
+}
+
+function buildPlansFromAnchors(anchors: EventItem[], places: UnifiedPlace[], count: number, used: Set<string>, namespace: string) {
+  const plans: GeneratedExploreArticle[] = [];
+  anchors.forEach((event, index) => {
+    if (plans.length >= count) return;
+    const key = exploreEventKey(event);
+    if (used.has(key)) return;
+    const plan = buildGeneratedMoseyForEvent(event, places, namespace, index);
+    if (!plan) return;
+    used.add(key);
+    plans.push(plan);
+  });
+  return plans;
+}
+
+function buildGeneratedMoseyForEvent(anchor: EventItem, places: UnifiedPlace[], context: string, index: number) {
+  const plan = buildGeneratedMosey(anchor, places, `${moseyTemplateIdForEvent(anchor)}-${context}`, moseyToneForEvent(anchor), index);
+  if (!plan) return null;
+  const { completeness: _completeness, index: _index, ...article } = plan;
+  return article;
+}
+
+function moseyTemplateIdForEvent(event: EventItem) {
+  if (hasVibe(event, "Date Night")) return "date-night-not-trying";
+  if (hasVibe(event, "Comedy") || /comedy|stand.?up|improv/i.test(`${event.title} ${event.category}`)) return "comedy-before-after";
+  if (event.isFree || hasVibe(event, "Free")) return "free-things-real-plan";
+  if (hasVibe(event, "Wellness", "Outdoors") && eventHour(event) < 14) return "wellness-morning-brunch";
+  if (hasVibe(event, "Dancing", "Late Night", "Social") && eventHour(event) >= 18) return "dinner-drinks-dance-floor";
+  if (hasVibe(event, "Popular", "Live Music", "Dancing") || event.attendeeCount > 80) return "group-chat-picked-plan";
+  return "solid-plan";
+}
+
+function moseyToneForEvent(event: EventItem): "lime" | "orange" | "blue" {
+  if (hasVibe(event, "Date Night", "Dancing", "Late Night")) return "orange";
+  if (hasVibe(event, "Comedy", "Weird Austin", "Under the Radar")) return "blue";
+  return "lime";
+}
+
+function planFoodDrinkStops(article: GeneratedExploreArticle) {
+  const stops = [article.before, article.after, article.bonus].filter(Boolean) as MoseyStop[];
+  return [
+    ...stops.filter((stop) => stop.place.kind === "restaurant" || stop.place.kind === "bar"),
+    ...stops.filter((stop) => stop.place.kind !== "restaurant" && stop.place.kind !== "bar")
+  ];
+}
+
+function explorePlanLabel(article: GeneratedExploreArticle) {
+  if (isToday(article.featuredEvent) && (article.timeOfDay === "evening" || article.timeOfDay === "late")) return "Tonight near you";
+  if (isToday(article.featuredEvent)) return "Today plan";
+  if (isTomorrow(article.featuredEvent)) return "Tomorrow plan";
+  return "Plan guide";
+}
+
+function eventAtVenueTitle(event: EventItem) {
+  return `${event.title} at ${event.venueName}`;
+}
+
+function isWithinNextDays(event: EventItem, days: number) {
+  const start = new Date(event.startDateTime).getTime();
+  if (!Number.isFinite(start)) return false;
+  const now = new Date();
+  return start >= now.getTime() && start <= now.getTime() + days * 24 * 60 * 60 * 1000;
 }
 
 function allocateExploreEvents(events: EventItem[], places: UnifiedPlace[], maxAppearances = 2) {
@@ -3754,123 +4039,201 @@ function allocateExploreEvents(events: EventItem[], places: UnifiedPlace[], maxA
 
 function generateExplorePlanArticles(events: EventItem[], places: UnifiedPlace[]) {
   const ranked = dedupeHomepageEvents([...events].sort((a, b) => articleEventScore(b) - articleEventScore(a) || sortSoonest(a, b)));
+  const today = ranked.filter((event) => isToday(event));
+  const tomorrow = ranked.filter((event) => isTomorrow(event));
+  const weekend = ranked.filter((event) => isThisWeekend(event) && !isToday(event) && !isTomorrow(event));
+  const fallback = ranked.filter((event) => !isToday(event) && !isTomorrow(event) && !isThisWeekend(event));
+  const anchorPool = dedupeHomepageEvents([...today, ...tomorrow, ...weekend, ...fallback]);
   const usedEvents = new Set<string>();
   const templates: Array<{
     id: string;
-    title: string;
-    label: string;
-    copy: (event: EventItem, foodAndDrink: UnifiedPlace[], evergreenPlaces: UnifiedPlace[]) => string;
     tone: "lime" | "orange" | "blue";
     matches: (event: EventItem) => boolean;
   }> = [
     {
       id: "east-side-girl-dinner-show",
-      title: "East Side Girl Dinner, Then a Show",
-      label: "East Side",
       tone: "orange",
-      matches: (event) => event.area === "East Side" && (hasVibe(event, "Live Music", "Comedy", "Dancing", "Social") || isTonight(event)),
-      copy: (event, foodAndDrink) => `Start with ${event.venueName}, then keep the group close with ${placeListCopy(foodAndDrink, "a nearby bite or drink")}.`
+      matches: (event) => event.area === "East Side" && (hasVibe(event, "Live Music", "Comedy", "Dancing", "Social") || isTonight(event))
     },
     {
       id: "wellness-morning-brunch",
-      title: "Wellness Morning That Turns Into Brunch",
-      label: "Wellness",
       tone: "lime",
-      matches: (event) => hasVibe(event, "Wellness", "Outdoors") && eventHour(event) < 14,
-      copy: (event, foodAndDrink, evergreenPlaces) => `Do the reset first, then make it social with ${placeListCopy(foodAndDrink, "coffee or brunch")}${evergreenPlaces.length ? ` and ${placeListCopy(evergreenPlaces, "a nearby wander")}` : ""}.`
+      matches: (event) => hasVibe(event, "Wellness", "Outdoors") && eventHour(event) < 14
     },
     {
       id: "hot-girl-walk-plan",
-      title: "The Low-Key Hot Girl Walk Plan",
-      label: "Soft plan",
       tone: "blue",
-      matches: (event) => hasVibe(event, "Outdoors", "Wellness", "Low-Key") && ["Barton/Zilker", "Central", "East Side"].includes(event.area),
-      copy: (event, foodAndDrink, evergreenPlaces) => `Keep it easy around ${areaLabel(event.area)} with ${placeListCopy(foodAndDrink, "a casual stop")}${evergreenPlaces.length ? ` plus ${placeListCopy(evergreenPlaces, "something nearby")}` : ""}.`
+      matches: (event) => hasVibe(event, "Outdoors", "Wellness", "Low-Key") && ["Barton/Zilker", "Central", "East Side"].includes(event.area)
     },
     {
       id: "dinner-drinks-dance-floor",
-      title: "Dinner, Drinks, and a Dance Floor",
-      label: "Dance night",
       tone: "orange",
-      matches: (event) => hasVibe(event, "Dancing", "Late Night", "Social") && eventHour(event) >= 18,
-      copy: (event, foodAndDrink) => `Use ${event.title} as the main event, then stack ${placeListCopy(foodAndDrink, "dinner or drinks")} close enough to keep momentum.`
+      matches: (event) => hasVibe(event, "Dancing", "Late Night", "Social") && eventHour(event) >= 18
     },
     {
       id: "free-things-real-plan",
-      title: "Free Things That Still Feel Like a Plan",
-      label: "Free",
       tone: "lime",
-      matches: (event) => event.isFree || hasVibe(event, "Free"),
-      copy: (event, foodAndDrink, evergreenPlaces) => `Anchor on the free thing, then add ${placeListCopy(foodAndDrink, "an easy nearby stop")}${evergreenPlaces.length ? ` and ${placeListCopy(evergreenPlaces, "a no-pressure extra")}` : ""}.`
+      matches: (event) => event.isFree || hasVibe(event, "Free")
     },
     {
       id: "comedy-before-after",
-      title: "Comedy Night With a Before-and-After Plan",
-      label: "Comedy",
       tone: "blue",
-      matches: (event) => hasVibe(event, "Comedy") || /comedy|stand.?up|improv/i.test(`${event.title} ${event.category}`),
-      copy: (event, foodAndDrink) => `Bookend the laughs at ${event.venueName} with ${placeListCopy(foodAndDrink, "food or drinks")} in the same pocket of town.`
+      matches: (event) => hasVibe(event, "Comedy") || /comedy|stand.?up|improv/i.test(`${event.title} ${event.category}`)
     },
     {
       id: "barton-springs-day",
-      title: "Barton Springs Day, Then Somewhere Cute",
-      label: "Barton",
       tone: "lime",
-      matches: (event) => event.area === "Barton/Zilker" && (hasVibe(event, "Outdoors", "Wellness", "Social") || eventHour(event) < 18),
-      copy: (event, foodAndDrink, evergreenPlaces) => `Make the Zilker side of town the plan with ${event.venueName}, ${placeListCopy(foodAndDrink, "a nearby reward")}${evergreenPlaces.length ? `, and ${placeListCopy(evergreenPlaces, "one extra stop")}` : ""}.`
+      matches: (event) => event.area === "Barton/Zilker" && (hasVibe(event, "Outdoors", "Wellness", "Social") || eventHour(event) < 18)
     },
     {
       id: "date-night-not-trying",
-      title: "A Date Night That Doesn’t Try Too Hard",
-      label: "Date night",
       tone: "orange",
-      matches: (event) => hasVibe(event, "Date Night", "Low-Key", "Live Music", "Comedy") && eventHour(event) >= 17,
-      copy: (event, foodAndDrink) => `Lead with ${event.title}, then avoid overplanning with ${placeListCopy(foodAndDrink, "one or two nearby options")}.`
+      matches: (event) => hasVibe(event, "Date Night", "Low-Key", "Live Music", "Comedy") && eventHour(event) >= 17
     },
     {
       id: "weird-austin-cute",
-      title: "Weird Austin, But Make It Cute",
-      label: "Weird",
       tone: "blue",
-      matches: (event) => hasVibe(event, "Weird Austin", "Under the Radar") || /weird|odd|drag|burlesque|market|art/i.test(`${event.title} ${event.category}`),
-      copy: (event, foodAndDrink, evergreenPlaces) => `Do the specific Austin thing, then keep the night cute with ${placeListCopy(foodAndDrink, "a close stop")}${evergreenPlaces.length ? ` and ${placeListCopy(evergreenPlaces, "a little extra texture")}` : ""}.`
+      matches: (event) => hasVibe(event, "Weird Austin", "Under the Radar") || /weird|odd|drag|burlesque|market|art/i.test(`${event.title} ${event.category}`)
     },
     {
       id: "group-chat-picked-plan",
-      title: "The Group Chat Finally Picked a Plan",
-      label: "Group plan",
       tone: "lime",
-      matches: (event) => hasVibe(event, "Popular", "Social", "Live Music", "Dancing") || event.attendeeCount > 80,
-      copy: (event, foodAndDrink) => `A high-confidence anchor with ${placeListCopy(foodAndDrink, "group-friendly food or drinks")} close enough for the whole chat.`
+      matches: (event) => hasVibe(event, "Popular", "Social", "Live Music", "Dancing") || event.attendeeCount > 80
     }
   ];
 
-  return templates
+  const templatePlans = templates
     .map((template, index) => {
-      const anchor = ranked.find((event) => template.matches(event) && !usedEvents.has(exploreEventKey(event)));
+      const anchor = anchorPool.find((event) => template.matches(event) && !usedEvents.has(exploreEventKey(event)));
       if (!anchor) return null;
       usedEvents.add(exploreEventKey(anchor));
-      const foodAndDrink = findArticlePlaces(anchor, places, ["restaurant", "bar"], []).slice(0, 2);
-      const evergreenPlaces = findArticlePlaces(anchor, places, ["park", "venue", "event-spot"], foodAndDrink.map((place) => place.id)).slice(0, 2);
-      if (!foodAndDrink.length && !evergreenPlaces.length) return null;
-      const completeness = (foodAndDrink.length >= 1 ? 2 : 0) + (foodAndDrink.length >= 2 ? 1 : 0) + (evergreenPlaces.length ? 1 : 0);
-      return {
-        id: `article-${template.id}-${anchor.id}`,
-        label: template.label,
-        title: template.title,
-        copy: template.copy(anchor, foodAndDrink, evergreenPlaces),
-        anchor,
-        foodAndDrink,
-        evergreenPlaces,
-        tone: template.tone,
-        completeness,
-        index
-      };
+      return buildGeneratedMosey(anchor, places, template.id, template.tone, index);
     })
-    .filter((article): article is GeneratedExploreArticle & { completeness: number; index: number } => Boolean(article))
+    .filter((article): article is GeneratedExploreArticle & { completeness: number; index: number } => Boolean(article));
+
+  if (templatePlans.length < 4) {
+    for (const anchor of anchorPool) {
+      if (templatePlans.length >= 4) break;
+      if (usedEvents.has(exploreEventKey(anchor))) continue;
+      const fallbackPlan = buildGeneratedMosey(anchor, places, "solid-plan", "lime", templatePlans.length + templates.length);
+      if (!fallbackPlan) continue;
+      usedEvents.add(exploreEventKey(anchor));
+      templatePlans.push(fallbackPlan);
+    }
+  }
+
+  return templatePlans
     .sort((a, b) => b.completeness - a.completeness || a.index - b.index)
     .slice(0, 4)
     .map(({ completeness: _completeness, index: _index, ...article }) => article);
+}
+
+function buildGeneratedMosey(anchor: EventItem, places: UnifiedPlace[], templateId: string, tone: "lime" | "orange" | "blue", index: number): (GeneratedExploreArticle & { completeness: number; index: number }) | null {
+  const usedPlaceIds: string[] = [];
+  const timeOfDay = eventTimeOfDay(anchor);
+  const before = buildMoseyStop(anchor, places, "Before", moseyBeforeKinds(timeOfDay), usedPlaceIds);
+  if (before) usedPlaceIds.push(before.place.id);
+  const after = buildMoseyStop(anchor, places, "After", moseyAfterKinds(timeOfDay), usedPlaceIds);
+  if (after) usedPlaceIds.push(after.place.id);
+  const bonus = buildMoseyStop(anchor, places, "Bonus", ["park", "venue", "event-spot", "restaurant", "bar"], usedPlaceIds);
+  if (bonus) usedPlaceIds.push(bonus.place.id);
+  const stops = [before, after, bonus].filter(Boolean) as MoseyStop[];
+  if (!stops.length) return null;
+  const headline = moseyHeadline(anchor, templateId, timeOfDay);
+  const hook = moseyHook(anchor, stops);
+  const completeness = (isToday(anchor) ? 4 : 0) + (isTomorrow(anchor) ? 2 : 0) + (stops.length >= 2 ? 2 : 0) + (stops.length >= 3 ? 1 : 0) + articleEventScore(anchor) / 80;
+  return {
+    id: `mosey-${templateId}-${anchor.id}`,
+    headline,
+    hook,
+    featuredEvent: anchor,
+    before,
+    after,
+    bonus,
+    cta: "Add to plan",
+    area: anchor.area,
+    timeOfDay,
+    vibe: moseyVibe(anchor),
+    rankedPlaceIds: stops.map((stop) => stop.place.id),
+    tone,
+    completeness,
+    index
+  };
+}
+
+function buildMoseyStop(anchor: EventItem, places: UnifiedPlace[], label: MoseyStop["label"], kinds: UnifiedPlace["kind"][], excludedIds: string[]) {
+  const place = findArticlePlaces(anchor, places, kinds, excludedIds)[0];
+  if (!place) return undefined;
+  return {
+    label,
+    place,
+    copy: moseyStopCopy(label, place, anchor)
+  };
+}
+
+function eventTimeOfDay(event: EventItem): GeneratedExploreArticle["timeOfDay"] {
+  const hour = eventHour(event);
+  if (hour < 12) return "morning";
+  if (hour < 17) return "afternoon";
+  if (hour < 22) return "evening";
+  return "late";
+}
+
+function moseyBeforeKinds(timeOfDay: GeneratedExploreArticle["timeOfDay"]): UnifiedPlace["kind"][] {
+  return ["restaurant", "bar"];
+}
+
+function moseyAfterKinds(timeOfDay: GeneratedExploreArticle["timeOfDay"]): UnifiedPlace["kind"][] {
+  if (timeOfDay === "morning") return ["restaurant", "bar"];
+  return ["bar", "restaurant"];
+}
+
+function moseyHeadline(event: EventItem, templateId: string, timeOfDay: GeneratedExploreArticle["timeOfDay"]) {
+  const eventTitle = shortEventTitle(event.title);
+  const dayWord = isToday(event) ? "today" : isTomorrow(event) ? "tomorrow" : dayLabel(event);
+  if (templateId.includes("date")) return `Heading to ${eventTitle}? Here's a solid plan.`;
+  if (templateId.includes("comedy")) return `What to do before and after ${eventTitle}.`;
+  if (templateId.includes("group")) return `The group chat could just do this ${dayWord}.`;
+  if (templateId.includes("wellness")) return `A surprisingly good ${timeOfDay} in ${areaLabel(event.area)}.`;
+  if (templateId.includes("free")) return `One free thing, plus a reason to leave the house.`;
+  if (isToday(event)) return `If you're looking for something to do today, start here.`;
+  if (isTonight(event)) return `If you're looking for something to do tonight, start here.`;
+  return `${eventTitle} is worth your ${dayWord}.`;
+}
+
+function moseyHook(event: EventItem, stops: MoseyStop[]) {
+  const lead = stops[0]?.place.name;
+  const second = stops[1]?.place.name;
+  if (lead && second) return `${event.venueName} gives you the reason to go. ${lead} and ${second} make the rest feel easy.`;
+  if (lead) return `${event.venueName} is the anchor. ${lead} keeps it from feeling like you only left the house for one thing.`;
+  return "Not a bad way to spend a few hours without turning it into a project.";
+}
+
+function moseyStopCopy(label: MoseyStop["label"], place: UnifiedPlace, event: EventItem) {
+  if (label === "Before") {
+    if (eventHour(event) < 12) return `Grab ${place.kind === "bar" ? "a drink" : "something easy"} first. No need to make the morning complicated.`;
+    if (eventHour(event) < 17) return `Start here before ${event.venueName}. It keeps the plan close and low-effort.`;
+    return `Eat or drink here first so the event is not the whole plan.`;
+  }
+  if (label === "After") {
+    if (eventHour(event) >= 17) return `Stick around afterward. This is close enough that nobody has to pitch a second neighborhood.`;
+    return `Since you're already over there, this is a good next move.`;
+  }
+  return `If you're still out, this gives the plan one more easy stop.`;
+}
+
+function moseyVibe(event: EventItem) {
+  if (event.vibeTags.includes("Live Music")) return "live music";
+  if (event.vibeTags.includes("Comedy")) return "comedy";
+  if (event.vibeTags.includes("Wellness")) return "wellness";
+  if (event.vibeTags.includes("Date Night")) return "date night";
+  if (event.vibeTags.includes("Dancing")) return "dance";
+  if (event.isFree || event.vibeTags.includes("Free")) return "free";
+  return event.category || "plan";
+}
+
+function shortEventTitle(title: string) {
+  return title.replace(/\s+(?:at|@)\s+.+$/i, "").replace(/\s+\|\s+.+$/i, "").trim().slice(0, 64);
 }
 
 function findArticlePlaces(anchor: EventItem, places: UnifiedPlace[], kinds: UnifiedPlace["kind"][], excludedIds: string[]) {
@@ -3878,6 +4241,8 @@ function findArticlePlaces(anchor: EventItem, places: UnifiedPlace[], kinds: Uni
   const excluded = new Set(excludedIds);
   return places
     .filter((place) => kinds.includes(place.kind) && !excluded.has(place.id))
+    .filter((place) => place.sourceId !== anchor.venueId && normalizeEventIdentity(place.name) !== normalizeEventIdentity(anchor.venueName))
+    .filter((place) => !place.upcomingEventIds.includes(anchor.id))
     .map((place) => {
       const coordinateDistance = origin?.latitude && origin.longitude && place.latitude && place.longitude
         ? distanceMiles({ latitude: origin.latitude, longitude: origin.longitude }, { latitude: place.latitude, longitude: place.longitude })
@@ -4072,7 +4437,7 @@ function PlaceDetailDrawer({
             <div className="p-4">
               <div className="relative min-h-[280px] overflow-hidden rounded-[1.5rem]">
                 <SafeImage className="object-cover" src={place.imageUrl} fallbackSrc={fallbackImage} alt="" fill sizes="(max-width: 768px) 100vw, 560px" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/86 via-black/34 to-transparent" />
+                <div className="image-card-fade" />
                 <div className="media-copy absolute bottom-4 left-4 right-4">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-neon">{place.neighborhoodPersonality}</p>
                   <h2 className="mt-2 text-4xl font-black leading-none tracking-[-0.04em]">{place.name}</h2>
